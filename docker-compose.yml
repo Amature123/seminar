@@ -17,9 +17,7 @@ x-airflow-common:
     PYTHONPATH: /opt/airflow
   volumes:
     - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/dags/logs
-    - ./requirements.txt:/opt/airflow/dags/requirements.txt
-
+    - ./logs:/opt/airflow/logs
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -165,8 +163,8 @@ services:
           echo -e "\033[1;33mWARNING: Not enough disk (recommended: 10GB)\e[0m"
           warning_resources="true"
         fi
-        mkdir -p /opt/airflow/{logs,dags,plugins}
-        chown -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags,plugins}
+        mkdir -p /opt/airflow/{logs,dags}
+        chown -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags}
         exec /entrypoint airflow version
     environment:
       <<: *airflow-common-env
@@ -191,12 +189,9 @@ services:
       - airflow
     networks:
       - seminar_project
-
-
 networks:
   seminar_project:
     driver: bridge
-
 #########################################################################################
 #                                   Multi-node CONFIG                                   #
 #                            Warning: heavy load for docker                             #
