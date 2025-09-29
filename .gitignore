@@ -3,3 +3,4 @@ cassandra_data
 data 
 .ipynb_checkpoints
 env
+logs
