@@ -6,6 +6,7 @@ from confluent_kafka import Producer
 import logging
 import uuid
 
+from numpy import record
 from vnstock import Vnstock, Quote
 
 # Logging Configuration
@@ -22,6 +23,7 @@ class KafkaUserDataProducer():
         self.topic = topic
         self.config = {'bootstrap.servers': bootstrap_servers}
         self.producer = Producer(self.config)
+        self.checkpoint = {}
 
     def json_serializer(self, data):
         if isinstance(data, uuid.UUID):
@@ -54,31 +56,29 @@ class KafkaUserDataProducer():
             logger.error(f"Error fetching data for {symbol}: {e}")
             return None
         
-    def produce_messages(self, symbol, source='tcbs'):
-        record = self.extract_stock_data(symbol, source)
-        if record is None:
-            return
-        try:
+    def produce_messages(self,record):
+        try :
             message = json.dumps(record, default=self.json_serializer)
-            self.producer.produce(
-                topic=self.topic,
-                value=message,
-                callback=self.delivery_report
-            )
+            self.producer.produce(self.topic, value=message, callback=self.delivery_report)
             self.producer.poll(0)
         except Exception as e:
             logger.error(f"Error producing message: {e}")
-        
-        self.producer.flush()
-        logger.info(f"Produced 1 message to topic {self.topic}")
-        return record
-    def process(self,symbol, source='tcbs'):
-        company = ['tcb','vci','acb','ctg']
-        for symbol in company:
-            record = self.produce_messages(symbol, source)
-            if record is not None:
-                logger.info(f"Produced message for {symbol}: {record}")
-            else :
-                logger.warning(f"Failed to produce message for {symbol}")
-        return record
+            return None
 
+    def producer_loop(self,symbols, source='tcbs'):
+        logger.info(f"Producing messages for symbols: {symbols}")
+        while True:
+            for symbol in symbols:
+                try:
+                    record = self.extract_stock_data(symbol, source)
+                    last_seen = self.checkpoint.get(symbol)
+                    if record and last_seen != record["time"]:
+                        self.produce_messages(record)
+                        self.checkpoint[symbol] = record["time"]
+                        logger.info(f"Produced message for {symbol} at {record['time']}")
+                    else:
+                        logger.info(f"No new data for {symbol}. Last seen: {last_seen}")
+                except Exception as e:
+                    logger.error(f"Error in producing loop for {symbol}: {e}")
+            self.producer.flush()
+            

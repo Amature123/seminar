@@ -3,7 +3,7 @@ import logging
 import json
 from datetime import datetime, timedelta
 from vnstock import Vnstock, Quote
-
+from cassandra.cluster import Cluster
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -49,6 +49,3 @@ class rawDataExtraction:
             pass
         finally:
             self.consumer.close()
-
-    def insert_to_cass(self, record):
-        

@@ -6,3 +6,5 @@ faker
 jsonschema
 confluent-kafka
 psycopg2-binary
+cassandra-driver
+vnstock
