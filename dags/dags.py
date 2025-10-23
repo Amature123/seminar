@@ -5,13 +5,15 @@ from datetime import timedelta, datetime
 import logging
 from script.production import KafkaUserDataProducer
 from script.rawDataExtraction import RawDataExtraction 
-
+from script.flink_handler import FlinkSqlOperator
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+with open('/opt/airflow/sql_job/create.sql') as f:
+    sql = f.read()
 
 default_args = {
     'owner': 'seminar',
@@ -37,11 +39,12 @@ def consume_stock_data():
         cassandra_host='cassandra'  
     )
     consumer.consumer_stock_price()
+def flink_processing_task():
 
 with DAG(
     dag_id='kafka_stock_pipeline_dag',
     default_args=default_args,
-    schedule_interval='*/3 * * * *', 
+    schedule_interval='* * * * *', 
     catchup=False,
     tags=['kafka', 'stock', 'etl']
 ) as dag:
@@ -54,6 +57,12 @@ with DAG(
     consume_data_task = PythonOperator(
         task_id='consume_stock_data',
         python_callable=consume_stock_data
+    )
+
+    flink_processing_task = FlinkSqlOperator(
+        task_id = 'flink_proccessing_data'
+        flink_host = 'localhost'
+        
     )
 
 
