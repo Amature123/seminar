@@ -9,7 +9,7 @@ CREATE TABLE stock_stream (
   WATERMARK FOR time AS time - INTERVAL '5' SECOND
 ) WITH (
   'connector' = 'kafka',
-  'topic' = 'flink-input',
+  'topic' = 'stock_data',
   'properties.bootstrap.servers' = 'kafka:9092',
   'properties.group.id' = 'stock-group',
   'scan.startup.mode' = 'latest-offset',
@@ -26,3 +26,15 @@ CREATE TABLE print_sink (
 ) WITH (
   'connector' = 'print'
 );
+INSERT INTO print_sink
+SELECT
+  symbol,
+  AVG(close) AS avg_close,
+  MAX(high) AS max_high,
+  MIN(low) AS min_low,
+  window_start,
+  window_end
+FROM TABLE(
+  TUMBLE(TABLE stock_stream, DESCRIPTOR(time), INTERVAL '1' MINUTE)
+)
+GROUP BY symbol, window_start, window_end;

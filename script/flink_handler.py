@@ -38,18 +38,18 @@
 
 # env.execute("Stock Streaming Job")
 from airflow.models import BaseOperator
-from airflow.utils.decorators import apply_defaults
+from airflow.utils.decorators import apply_defaults 
 import requests
 
 class FlinkSqlOperator(BaseOperator):
-    @apply_defaults
+    @apply_defaults 
     def __init__(self, flink_host, sql_statement, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.flink_host = flink_host
         self.sql_statement = sql_statement
 
     def execute(self, context):
-        url = f"http://{self.flink_host}:8081/v1/statements"
+        url = f"http://{self.flink_host}:8083/v1/statements"
         payload = {"statement": self.sql_statement}
         response = requests.post(url, json=payload)
         if response.status_code != 200:

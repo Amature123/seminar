@@ -78,18 +78,6 @@ services:
     networks:
       - seminar_project
 
-  kafka-init:
-    image: confluentinc/cp-kafka:latest
-    depends_on:
-      - kafka
-    entrypoint: >
-      sh -c "
-      cub kafka-ready -b kafka:9092 1 20 &&
-      kafka-topics --create --topic stock_data --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 || true
-      "
-    networks:
-      - seminar_project
-
   # cassandra:
   #   image: cassandra:latest
   #   container_name: cassandra
@@ -223,6 +211,12 @@ services:
       jobmanager:
         condition: service_healthy
     command: taskmanager
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep org.apache.flink.runtime.taskexecutor.TaskManagerRunner | grep -qv grep"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     environment:
       - |
         FLINK_PROPERTIES=
@@ -231,26 +225,40 @@ services:
 
     networks:
       - seminar_project
-  sql-client:
+  # sql-client:
+  #   image: flink:1.19.0
+  #   container_name: sql-client
+  #   depends_on:
+  #     jobmanager:
+  #       condition: service_healthy
+  #     taskmanager:
+  #       condition: service_healthy
+  #   environment:
+  #   - |
+  #     FLINK_PROPERTIES=
+  #     jobmanager.rpc.address: jobmanager
+  #     rest.address: jobmanager
+  #   networks:
+  #     - seminar_project
+
+  sql-gateway:
     image: flink:1.19.0
-    container_name: sql-client
-    command: bin/sql-client.sh /opt/flink/sql_job/create_job.sql
+    container_name: sql-gateway
+    ports:
+      - "8083:8083"
+    command: sql-gateway.sh start-foreground -Dsql-gateway.endpoint.rest.address=localhost  
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.address: jobmanager
     depends_on:
-      kafka-init:
-        condition: service_completed_successfully
       jobmanager:
         condition: service_healthy
       taskmanager:
         condition: service_healthy
-
-    environment:
-    - |
-      FLINK_PROPERTIES=
-      jobmanager.rpc.address: jobmanager
-      rest.address: jobmanager
     networks:
       - seminar_project
-
 networks:
   seminar_project:
     driver: bridge

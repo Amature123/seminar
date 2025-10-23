@@ -12,13 +12,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-with open('/opt/airflow/sql_job/create.sql') as f:
-    sql = f.read()
+with open('/opt/airflow/sql_job/jobs.sql') as f:
+    jobs = f.read()
+
 
 default_args = {
     'owner': 'seminar',
     'depends_on_past': False,
-    'start_date': datetime.now(),
+    'start_date': days_ago(1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
@@ -39,7 +40,7 @@ def consume_stock_data():
         cassandra_host='cassandra'  
     )
     consumer.consumer_stock_price()
-def flink_processing_task():
+
 
 with DAG(
     dag_id='kafka_stock_pipeline_dag',
@@ -54,16 +55,16 @@ with DAG(
         python_callable=produce_stock_data
     )
 
-    consume_data_task = PythonOperator(
-        task_id='consume_stock_data',
-        python_callable=consume_stock_data
-    )
+    # consume_data_task = PythonOperator(
+    #     task_id='consume_stock_data',
+    #     python_callable=consume_stock_data
+    # )
 
     flink_processing_task = FlinkSqlOperator(
-        task_id = 'flink_proccessing_data'
-        flink_host = 'localhost'
-        
+        task_id = 'flink_proccessing_data',
+        flink_host = 'localhost',
+        sql_statement = jobs
     )
 
 
-    produce_data_task >> consume_data_task
+    produce_data_task >> flink_processing_task
