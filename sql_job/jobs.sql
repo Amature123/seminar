@@ -4,7 +4,7 @@ CREATE TABLE stock_stream (
   open DOUBLE,
   high DOUBLE,
   low DOUBLE,
-  close DOUBLE,
+  `close` DOUBLE,
   volume BIGINT,
   WATERMARK FOR time AS time - INTERVAL '5' SECOND
 ) WITH (

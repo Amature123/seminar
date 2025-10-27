@@ -45,7 +45,7 @@ def consume_stock_data():
 with DAG(
     dag_id='kafka_stock_pipeline_dag',
     default_args=default_args,
-    schedule_interval='* * * * *', 
+    schedule_interval='*/5 * * * *', 
     catchup=False,
     tags=['kafka', 'stock', 'etl']
 ) as dag:
@@ -62,7 +62,7 @@ with DAG(
 
     flink_processing_task = FlinkSqlOperator(
         task_id = 'flink_proccessing_data',
-        flink_host = 'localhost',
+        flink_host = 'sql-gateway',
         sql_statement = jobs
     )
 

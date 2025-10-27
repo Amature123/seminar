@@ -37,10 +37,13 @@
 # processed.add_sink(producer)
 
 # env.execute("Stock Streaming Job")
+from urllib import response
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults 
 import requests
-
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 class FlinkSqlOperator(BaseOperator):
     @apply_defaults 
     def __init__(self, flink_host, sql_statement, *args, **kwargs):
@@ -48,10 +51,45 @@ class FlinkSqlOperator(BaseOperator):
         self.flink_host = flink_host
         self.sql_statement = sql_statement
 
-    def execute(self, context):
-        url = f"http://{self.flink_host}:8083/v1/statements"
-        payload = {"statement": self.sql_statement}
-        response = requests.post(url, json=payload)
+    def get_session_id(self):
+        logger.info(f"Creating Flink SQL session on host: {self.flink_host}")
+        response = requests.post(f'http://{self.flink_host}:8083/v1/sessions', json={})
+        response.raise_for_status()
+        session_info = response.json()
+        return session_info['sessionHandle']
+
+    def statement_execute(self, session_id):
+        logger.info(f"Executing SQL statement in session ID: {session_id}")
+        payload = {
+            "statement": self.sql_statement
+        }
+        response = requests.post(f'http://{self.flink_host}:8083/v1/sessions/{session_id}/statements', json=payload)
+        response.raise_for_status()
+        operation_handler = response.json()
         if response.status_code != 200:
             raise Exception(f"Flink SQL failed: {response.text}")
-        self.log.info("Flink SQL executed: %s", self.sql_statement)
+        return operation_handler['operationHandle']
+    
+    def get_statement_result(self, session_id, operation_handle):
+        logger.info(f"Fetching result for operation handle: {operation_handle} in session ID: {session_id}")
+        response = requests.get(f'http://{self.flink_host}:8083/v1/sessions/{session_id}/operations/{operation_handle}/result/0')
+        response.raise_for_status()
+        result = response.json()
+        while result['resultType']!='EOS':
+            if result['resultType']=='NOT_READY':
+                logger.info("Result not ready, waiting...")
+                continue
+            logger.info(f"show result : {result}, fetching next chunk...")
+            next_response = requests.get(f'http://{self.flink_host}:8083{result["nextResultUri"]}')
+            next_response.raise_for_status()
+            result = next_response.json()
+            logger.info(f"Intermediate Flink SQL result: {result}")
+        logger.info(f"Flink SQL final result: {result}")
+        return result
+
+    def execute(self, context):
+        session_id = self.get_session_id()
+        operation_handle = self.statement_execute(session_id)
+        result = self.get_statement_result(session_id, operation_handle)
+        logger.info(f"Flink SQL execution result: {result}")
+        return result

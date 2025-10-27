@@ -246,12 +246,17 @@ services:
     container_name: sql-gateway
     ports:
       - "8083:8083"
-    command: sql-gateway.sh start-foreground -Dsql-gateway.endpoint.rest.address=localhost  
+    command: >
+      ./bin/sql-gateway.sh start-foreground
+      -Dsql-gateway.endpoint.type=rest
+      -Dsql-gateway.endpoint.rest.address=localhost
+      -Dsql-gateway.endpoint.rest.port=8083
+      -Djobmanager.rpc.address=jobmanager
     environment:
-      - |
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-        rest.address: jobmanager
+        - |
+          FLINK_PROPERTIES=
+          jobmanager.rpc.address: jobmanager
+          rest.address: jobmanager
     depends_on:
       jobmanager:
         condition: service_healthy

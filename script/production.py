@@ -18,7 +18,7 @@ class KafkaUserDataProducer:
     def __init__(self, topic='stock_data', bootstrap_servers='kafka:9092'):
         self.topic = topic
         self.producer = Producer({'bootstrap.servers': bootstrap_servers})
-        self.source = 'vci'
+        self.source = 'tcbs'
         self.checkpoint = {}
 
     def json_serializer(self, data):
