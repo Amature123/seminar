@@ -1,60 +1,67 @@
-import random
-import json
-from datetime import datetime
-
-from vnstock import Stock
-from confluent_kafka import Producer
 import logging
-import uuid
+import time
+from script.production import KafkaUserDataProducer
+from script.rawDataExtraction import RawDataExtraction
+from script.flink_handler import FlinkStockHandler
 
-# Logging Configuration
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+def produce_stock_data():
+    """Send stock price data to Kafka topic 'stock_data'."""
+    producer = KafkaUserDataProducer(
+        topic='stock_data',
+        bootstrap_servers='kafka:9092'
+    )
+    symbols = ['tcb', 'vci', 'vcb', 'acb', 'tpb']
+    logger.info("Starting Kafka producer for symbols: %s", symbols)
+    producer.producer_loop(symbols, sleep_time=5)
 
-class KafkaUserDataProducer:
-    
-    def __init__(self, bootstrap_servers='kafka:9092', topic='stock data'):
-        self.topic = topic
-        self.config = {'bootstrap.servers': bootstrap_servers}
-        self.producer = Producer(self.config)
+def consume_stock_data():
+    """Consume processed data from Kafka and write to Cassandra."""
+    consumer = RawDataExtraction(
+        bootstrap_servers='kafka:9092',
+        group_id='raw_data',
+        topic='stock_data',
+        cassandra_host='cassandra'
+    )
+    logger.info("Starting Kafka consumer to store data in Cassandra")
+    consumer.consumer_stock_price()
 
+def processing_data():
+    """Run Flink job to process stream data."""
+    processer = FlinkStockHandler(
+        topic_in='stock_data',
+        topic_out='stock_processed',
+        kafka_servers='kafka:9092'
+    )
+    logger.info("Starting Flink stream processing job")
+    processer.process_stream()
 
-    def _json_serializer(self, data):
-        if isinstance(data, uuid.UUID):
-            return str(data)
-        raise TypeError(f"Type {type(data)} not serializable")
+def main():
+    """
+    Entry point for the full pipeline.
+    Adjust the sequence if you want them to run concurrently instead of sequentially.
+    """
+    logger.info("=== Starting Stock Streaming Pipeline ===")
 
-    def _delivery_report(self, err, msg):
-        if err is not None:
-            logger.error(f"Message delivery failed: {err}")
-        else:
-            logger.info(f"Message delivered to {msg.topic()} [{msg.partition()}]")
+    # Step 1: Start producer (simulate streaming data)
+    produce_stock_data()
 
-    def retrieve_stock_information(self):
-        stock = Stock()
-        stock_data = stock.get_stock_data()
-        return stock_data
+    # Optional: wait a bit before starting processing
+    time.sleep(3)
 
-    def send_messages(self, n_customers=20):
-        try:
-            for _ in range(n_customers):
-                payload = self._generate_fake_user()
-                logger.info(f"Sending customer {payload['customer']['customer_id']} to Kafka...")
-                
-                self.producer.produce(
-                    self.topic,
-                    value=json.dumps(payload, default=self._json_serializer).encode('utf-8'),
-                    callback=self._delivery_report
-                )
-                self.producer.poll(0)  
-                logger.info(f"Produced message {payload}")
+    # Step 2: Start Flink processing job
+    processing_data()
 
-            self.producer.flush()
-            logger.info("All messages sent.")
-        except Exception as e:
-            logger.error(f"Error sending messages to Kafka: {e}")
+    # Step 3 (optional): Start consumer to write results to Cassandra
+    # Uncomment if you want consumer active as part of pipeline
+    # consume_stock_data()
 
+    logger.info("=== Pipeline finished (or running continuously) ===")
+
+if __name__ == "__main__":
+    main()

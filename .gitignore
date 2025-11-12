@@ -6,3 +6,4 @@ env
 logs
 .pylintrc
 __pycache__
+models

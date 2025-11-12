@@ -1,5 +1,4 @@
 pandas
-numpy
 faker>=30.0.0,<=35.0.0
 python-dotenv
 faker
@@ -7,6 +6,5 @@ jsonschema
 confluent-kafka
 psycopg2-binary
 tenacity
-vnstock 
 cassandra-driver
-vnstock
+apache-flink==1.19.0

@@ -5,16 +5,12 @@ from datetime import timedelta, datetime
 import logging
 from script.production import KafkaUserDataProducer
 from script.rawDataExtraction import RawDataExtraction 
-from script.flink_handler import FlinkSqlOperator
+from script.flink_handler import FlinkStockHandler
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-with open('/opt/airflow/sql_job/jobs.sql') as f:
-    jobs = f.read()
-
 
 default_args = {
     'owner': 'seminar',
@@ -22,7 +18,7 @@ default_args = {
     'start_date': days_ago(1),
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 3,
+    'retries': 2,
     'retry_delay': timedelta(minutes=2),
 }
 
@@ -40,6 +36,14 @@ def consume_stock_data():
         cassandra_host='cassandra'  
     )
     consumer.consumer_stock_price()
+
+def processing_data():
+    processer = FlinkStockHandler(
+        topic_in='stock_data',
+        topic_out='stock_processed',
+        kafka_servers='kafka:9092',
+    )
+    processer.process_stream()
 
 
 with DAG(
@@ -60,11 +64,9 @@ with DAG(
     #     python_callable=consume_stock_data
     # )
 
-    flink_processing_task = FlinkSqlOperator(
-        task_id = 'flink_proccessing_data',
-        flink_host = 'sql-gateway',
-        sql_statement = jobs
+    flink_processing_task = PythonOperator(
+        task_id =  'flink_process_stock_data',
+        python_callable=processing_data
     )
-
-
+    
     produce_data_task >> flink_processing_task

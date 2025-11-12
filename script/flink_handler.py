@@ -1,95 +1,70 @@
-# from pyflink.datastream import StreamExecutionEnvironment
-# from pyflink.datastream.connectors.kafka import FlinkKafkaConsumer, FlinkKafkaProducer
-# from pyflink.common.serialization import SimpleStringSchema
-# import logging
-# import json
+from pyflink.datastream import TimeCharacteristic
+from pyflink.datastream.functions import ProcessFunction, RuntimeContext
+from pyflink.common.time import Time
+from pyflink.datastream.window import TumblingProcessingTimeWindows
 
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger(__name__)
+def process_stream(self):
+    logger.info("Starting DataStream processing...")
 
+    try:
+        source = (
+            KafkaSource.builder()
+            .set_bootstrap_servers(self.kafka_servers)
+            .set_topics(self.topic_in)
+            .set_group_id("stock_group")
+            .set_value_only_deserializer(SimpleStringSchema())
+            .build()
+        )
 
+        stream = self.env.from_source(source, WatermarkStrategy.no_watermarks(), "Kafka Source")
+        logger.info("Kafka source created successfully.")
+    except Exception as e:
+        logger.error(f"Error creating Kafka source: {e}")
+        return  
 
+    # --- Parse JSON và chuyển sang dạng object ---
+    parsed_stream = stream.map(
+        lambda x: json.loads(x),
+        output_type=Types.MAP(Types.STRING(), Types.STRING())
+    )
 
-# def process_stock_data(record):
-#     logger.info(f"Processing record: {record}")
-#     data = json.loads(record)
-#     data["price_moving_avg"] = (data["price"] + data.get("prev_price", data["price"])) / 2
-#     return json.dumps(data)
+    # --- Chuyển đổi dữ liệu về dạng cụ thể ---
+    mapped_stream = parsed_stream.map(
+        lambda d: (d["symbol"], float(d["price"]), int(d["volume"])),
+        output_type=Types.TUPLE([Types.STRING(), Types.FLOAT(), Types.INT()])
+    )
 
-# env = StreamExecutionEnvironment.get_execution_environment()
+    # --- Window aggregation (5 phút) ---
+    averaged_stream = (
+        mapped_stream
+        .key_by(lambda x: x[0])  # theo mã cổ phiếu
+        .window(TumblingProcessingTimeWindows.of(Time.minutes(5)))
+        .reduce(
+            lambda a, b: (a[0], (a[1] + b[1]) / 2, a[2] + b[2]),  # tính trung bình giá, cộng volume
+            output_type=Types.TUPLE([Types.STRING(), Types.FLOAT(), Types.INT()])
+        )
+    )
 
+    # --- Serialize lại thành JSON ---
+    json_stream = averaged_stream.map(
+        lambda t: json.dumps({"symbol": t[0], "avg_price": t[1], "total_volume": t[2]}),
+        output_type=Types.STRING()
+    )
 
-# consumer = FlinkKafkaConsumer(
-#     topics='stock_data',
-#     deserialization_schema=SimpleStringSchema(),
-#     properties={'bootstrap.servers': 'kafka:9092', 'group.id': 'flink_stock'}
-# )
+    # --- Kafka sink ---
+    sink = (
+        KafkaSink.builder()
+        .set_bootstrap_servers("kafka:9092")
+        .set_record_serializer(
+            KafkaRecordSerializationSchema.builder()
+            .set_topic(self.topic_out)
+            .set_value_serialization_schema(SimpleStringSchema())
+            .build()
+        )
+        .build()
+    )
 
+    json_stream.sink_to(sink)
 
-# producer = FlinkKafkaProducer(
-#     topic='stock_processed',
-#     serialization_schema=SimpleStringSchema(),
-#     producer_config={'bootstrap.servers': 'kafka:9092'}
-# )
-
-# stream = env.add_source(consumer)
-# processed = stream.map(process_stock_data)
-# processed.add_sink(producer)
-
-# env.execute("Stock Streaming Job")
-from urllib import response
-from airflow.models import BaseOperator
-from airflow.utils.decorators import apply_defaults 
-import requests
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-class FlinkSqlOperator(BaseOperator):
-    @apply_defaults 
-    def __init__(self, flink_host, sql_statement, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.flink_host = flink_host
-        self.sql_statement = sql_statement
-
-    def get_session_id(self):
-        logger.info(f"Creating Flink SQL session on host: {self.flink_host}")
-        response = requests.post(f'http://{self.flink_host}:8083/v1/sessions', json={})
-        response.raise_for_status()
-        session_info = response.json()
-        return session_info['sessionHandle']
-
-    def statement_execute(self, session_id):
-        logger.info(f"Executing SQL statement in session ID: {session_id}")
-        payload = {
-            "statement": self.sql_statement
-        }
-        response = requests.post(f'http://{self.flink_host}:8083/v1/sessions/{session_id}/statements', json=payload)
-        response.raise_for_status()
-        operation_handler = response.json()
-        if response.status_code != 200:
-            raise Exception(f"Flink SQL failed: {response.text}")
-        return operation_handler['operationHandle']
-    
-    def get_statement_result(self, session_id, operation_handle):
-        logger.info(f"Fetching result for operation handle: {operation_handle} in session ID: {session_id}")
-        response = requests.get(f'http://{self.flink_host}:8083/v1/sessions/{session_id}/operations/{operation_handle}/result/0')
-        response.raise_for_status()
-        result = response.json()
-        while result['resultType']!='EOS':
-            if result['resultType']=='NOT_READY':
-                logger.info("Result not ready, waiting...")
-                continue
-            logger.info(f"show result : {result}, fetching next chunk...")
-            next_response = requests.get(f'http://{self.flink_host}:8083{result["nextResultUri"]}')
-            next_response.raise_for_status()
-            result = next_response.json()
-            logger.info(f"Intermediate Flink SQL result: {result}")
-        logger.info(f"Flink SQL final result: {result}")
-        return result
-
-    def execute(self, context):
-        session_id = self.get_session_id()
-        operation_handle = self.statement_execute(session_id)
-        result = self.get_statement_result(session_id, operation_handle)
-        logger.info(f"Flink SQL execution result: {result}")
-        return result
+    logger.info("✅ Submitting DataStream job...")
+    self.env.execute("Stock Price Analytics Job")
