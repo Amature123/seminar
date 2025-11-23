@@ -1,4 +1,6 @@
-FROM python:3.11-slim
+FROM python:3.11-bullseye
+
+USER root
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
@@ -17,15 +19,16 @@ WORKDIR /app
 
 COPY requirements.txt .
 
+
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt && \
     pip install git+https://github.com/thinh-vu/vnstock && \
+    pip install "numpy<1.25.0"
 
-RUN mkdir -p /usr/local/lib/pyflink/opt && \
-    wget -q https://repo1.maven.org/maven2/org/apache/flink/flink-connector-kafka/4.0.0-2.0/flink-connector-kafka-4.0.0-2.0.jar -P /usr/local/lib/pyflink/opt && \
-    wget -q https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/4.0.0-2.0/flink-sql-connector-kafka-4.0.0-2.0.jar -P /usr/local/lib/pyflink/opt && \
-    wget -q https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/4.0.0/kafka-clients-4.0.0.jar -P /usr/local/lib/pyflink/opt
+RUN wget -q https://repo1.maven.org/maven2/org/apache/flink/flink-connector-kafka/4.0.0-2.0/flink-connector-kafka-4.0.0-2.0.jar -P /usr/local/lib/python3.11/site-packages/pyflink/opt && \
+    wget -q https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/4.0.0-2.0/flink-sql-connector-kafka-4.0.0-2.0.jar -P /usr/local/lib/python3.11/site-packages/pyflink/opt && \
+    wget -q https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/4.0.0/kafka-clients-4.0.0.jar -P /usr/local/lib/python3.11/site-packages/pyflink/opt
 
 COPY . .
 
-CMD ["python3", "main.py"]
+RUN chmod +x /app/run.sh

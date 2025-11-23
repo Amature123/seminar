@@ -1,4 +1,4 @@
-from confluent_kafka import Consumer, KafkaError
+from kafka import KafkaConsumer
 import logging
 import json
 from datetime import datetime
@@ -11,16 +11,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class RawDataExtraction:
-    def __init__(self, bootstrap_servers='kafka:9092', group_id='raw_data', topic='stock_data', cassandra_host='cassandra'):
+    def __init__(self, bootstrap_servers='localhost:9092', group_id='raw_data', topic='stock_data', cassandra_host='cassandra'):
         self.topic = topic
         self.cassandra_host = cassandra_host
-        self.consumer_config = {
-            'bootstrap.servers': bootstrap_servers,
-            'group.id': group_id,
-            'auto.offset.reset': 'earliest'
-        }
-        self.consumer = Consumer(self.consumer_config)
-        self.consumer.subscribe([self.topic])
+        
+        self.consumer = KafkaConsumer(
+            self.topic,
+            bootstrap_servers=bootstrap_servers,
+            group_id=group_id,
+            auto_offset_reset='earliest',
+            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
+        )
         self.cluster = None
         self.session = None
 
@@ -42,23 +43,17 @@ class RawDataExtraction:
         except Exception as e:
             logger.error(f"Error inserting to Cassandra: {e}")
 
-    def consume_messages(self , duration=30):
-        
+    def consume_messages(self, duration=30):
         start = datetime.now()
-
         try:
-            while (datetime.now() - start).seconds < duration:
-                msg = self.consumer.poll(0.5)
-                if msg is None:
-                    continue
-                if msg.error():
-                    if msg.error().code() == KafkaError._PARTITION_EOF:
-                        logger.info(f"End of partition {msg.topic()} [{msg.partition()}]")
-                    else:
-                        logger.error(f"Kafka error: {msg.error()}")
-                else:
-                    self._process_message(msg)
-
+            for message in self.consumer:
+                if (datetime.now() - start).seconds >= duration:
+                    break
+                logger.info(f"Received message: {message.value}")
+                try:
+                    self.insert_data(self.session, message.value)
+                except Exception as e:
+                    logger.error(f"Error inserting to Cassandra: {e}")
         except KeyboardInterrupt:
             logger.info("Consumer interrupted.")
         finally:
@@ -131,3 +126,13 @@ class RawDataExtraction:
             if self.cluster:
                 self.cluster.shutdown()
             logger.info("Shutdown complete.")
+
+if __name__ == "__main__":
+    consumer = RawDataExtraction(
+        bootstrap_servers='kafka_broker:19092',
+        group_id='raw_data',
+        topic='stock_data',
+        cassandra_host='cassandra'
+    )
+    logger.info("Starting Kafka consumer to store data in Cassandra")
+    consumer.consumer_stock_price()

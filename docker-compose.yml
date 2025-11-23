@@ -1,7 +1,6 @@
 
 services:
 
-
   kafka-controller:
     image: apache/kafka:4.0.0
     container_name: kafka-controller
@@ -35,6 +34,7 @@ services:
     container_name: kafka_broker
     ports:
       - "29092:9092"
+    restart: always
     environment:
       KAFKA_NODE_ID: 3
       KAFKA_PROCESS_ROLES: broker
@@ -56,6 +56,7 @@ services:
     container_name: kafka_broker_1
     ports:
       - "39092:9092"
+    restart: always
     environment:
       KAFKA_NODE_ID: 4
       KAFKA_PROCESS_ROLES: broker
@@ -94,7 +95,7 @@ services:
       - seminar_project
 
   jobmanager:
-    image: flink:1.19
+    image: flink:2.0
     container_name: jobmanager
     ports:
       - "8081:8081"
@@ -111,7 +112,7 @@ services:
     networks:
       - seminar_project
   taskmanager:
-    image: flink:1.19
+    image: flink:2.0
     container_name: taskmanager
     depends_on:
       jobmanager:
@@ -136,7 +137,7 @@ services:
       context: .
       dockerfile: Dockerfile  
     container_name: main_app
-    command: python3 main.py
+    command: ["bash", "run.sh"]
     volumes:
       - .:/app
     depends_on:

@@ -3,8 +3,8 @@ faker>=30.0.0,<=35.0.0
 python-dotenv
 faker
 jsonschema
-confluent-kafka
+kafka-python
 psycopg2-binary
 tenacity
 cassandra-driver
-apache-flink==1.19.0
+apache-flink==2.0.0

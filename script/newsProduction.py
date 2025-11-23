@@ -5,7 +5,8 @@ import logging
 import numpy as np
 from datetime import datetime
 from kafka import KafkaProducer
-from vnstock import Quote
+from vnstock import Company
+
 
 
 logging.basicConfig(
@@ -14,10 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class KafkaUserDataProducer:
-    def __init__(self, topic='stock_data', bootstrap_servers='localhost:9092'):
-        self.topic = topic
-        
+class KafkaNewsProduct:
+    def __init__(self, topic='news', bootstrap_servers='localhost:9092'):
+        self.topic = topic 
         self.producer = KafkaProducer(
             bootstrap_servers=[bootstrap_servers],
             value_serializer=lambda v: json.dumps(v, default=self.json_serializer).encode('utf-8')
@@ -42,23 +42,18 @@ class KafkaUserDataProducer:
         end_date = end_date or datetime.now().strftime("%Y-%m-%d")
         
         try:
-            quote = Quote(symbol=symbol, source=self.source)
-            data = quote.history(start=start_date, end=end_date, interval='1m')
+            company = Company(symbol=symbol, source=self.source)
+            data = company.news()
             
             if data.empty:
                 logger.warning(f"No data returned for {symbol}")
                 return None
-            
             record = {
-                "symbol": symbol,
-                "time": data["time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                "open": data["open"].iloc[-1],
-                "high": data["high"].iloc[-1],
-                "low": data["low"].iloc[-1],
-                "close": data["close"].iloc[-1],
-                "volume": data["volume"].iloc[-1],
+                'symbol': symbol,
+                'id': data['id'].iloc[-1],
+                'title': data['title'].iloc[-1],
+                'publish_date': data['publish_date'].iloc[-1]
             }
-            
             record = {k: (v.item() if isinstance(v, np.generic) else v) for k, v in record.items()}
             return record
             
@@ -78,20 +73,19 @@ class KafkaUserDataProducer:
 
     def run(self, symbols, sleep_time=10):
         logger.info(f"Producing messages for symbols: {symbols}")
-        
         try:
             for symbol in symbols:
                 try:
                     record = self.extract_stock_data(symbol)
                     last_seen = self.checkpoint.get(symbol)
                     
-                    if record and last_seen != record["time"]:
+                    if record and last_seen != record["id"]:
                         self.produce_messages(record)
                         logger.info(f"Record to be sent: {record}")
-                        self.checkpoint[symbol] = record["time"]
-                        logger.info(f"Produced message for {symbol} at {record['time']}")
+                        self.checkpoint[symbol] = record["id"]
+                        logger.info(f"Produced message for {symbol} at {record['id']}")
                     else:
-                        logger.info(f"No new data for {symbol}. Last seen: {last_seen}")
+                        logger.info(f"No news for new data for {symbol}. Last seen: {last_seen}")
                         
                 except Exception as e:
                     logger.error(f"Error in producing loop for {symbol}: {e}")
@@ -103,15 +97,15 @@ class KafkaUserDataProducer:
         except Exception as e:
             logger.error(f"Error at procedure: {e}")
 if __name__ == "__main__":
-    producer = KafkaUserDataProducer(
-        topic='stock_data',
+    producer = KafkaNewsProduct(
+        topic='news_data',
         bootstrap_servers='kafka_broker:19092'
     )
     symbols = ['tcb', 'vci', 'vcb', 'acb', 'tpb']
     logger.info("Starting Kafka producer for symbols: %s", symbols)
     while True:
         try:
-            producer.run(symbols, sleep_time=10) 
+            producer.run(symbols, sleep_time=60) 
         except KeyboardInterrupt:
             logger.info("Producer stopped by user")
         finally:
