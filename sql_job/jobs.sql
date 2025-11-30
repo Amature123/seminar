@@ -38,3 +38,6 @@ FROM TABLE(
   TUMBLE(TABLE stock_stream, DESCRIPTOR(time), INTERVAL '1' MINUTE)
 )
 GROUP BY symbol, window_start, window_end;
+
+
+        self.env.add_jars("file:///opt/flink/opt/flink-connector-kafka-4.0.0-2.0.jar","file:///opt/flink/opt/kafka-clients-4.0.0.jar")

@@ -10,7 +10,6 @@ from datetime import datetime
 import json
 import logging
 from collections import deque
-
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -342,7 +341,7 @@ class AlertProcessor(KeyedProcessFunction):
 # ============================================================================
 # USE CASE 5: MULTI-SYMBOL ANALYSIS - REALTIME
 # ============================================================================
-class MultiSymbolCorrelationProcessor(ProcessFunction):
+class MultiSymbolCorrelationProcessor(KeyedProcessFunction):
     """
     Analyze correlation and relative strength between symbols in realtime
     Process ALL symbols together (not keyed)
@@ -514,12 +513,8 @@ class FlinkStockHandler:
         self.topic_out = topic_out
         self.kafka_servers = kafka_servers
         self.env = StreamExecutionEnvironment.get_execution_environment()
-        self.env.add_jars(
-            "file:///usr/local/lib/python3.11/site-packages/pyflink/opt/flink-connector-kafka-4.0.0-2.0.jar",
-            "file:///usr/local/lib/python3.11/site-packages/pyflink/opt/kafka-clients-4.0.0.jar"
-        )
+        self.env.add_jars("file:///opt/flink/opt/flink-connector-kafka-4.0.0-2.0.jar","file:///opt/flink/opt/kafka-clients-4.0.0.jar")
         self.env.enable_checkpointing(5000)
-        
         self.source = (
             KafkaSource.builder()
             .set_bootstrap_servers(self.kafka_servers)
@@ -565,60 +560,19 @@ class FlinkStockHandler:
             .key_by(lambda x: json.loads(x)['symbol'])
             .process(OHLCRealtimeProcessor())
         )
-        
-        # USE CASE 2: Technical Indicators (SMA, EMA, RSI, MACD, BB)
-        technical_stream = (
-            base_stream
-            .key_by(lambda x: json.loads(x)['symbol'])
-            .process(TechnicalIndicatorProcessor(sma_period=20, ema_short=12, ema_long=26, rsi_period=14))
-        )
-        
-        # USE CASE 3: Pattern Detection
-        pattern_stream = (
-            base_stream
-            .key_by(lambda x: json.loads(x)['symbol'])
-            .process(PatternDetectionProcessor())
-        )
-        
-        # USE CASE 4: Real-time Alerts
-        alert_stream = (
-            base_stream
-            .key_by(lambda x: json.loads(x)['symbol'])
-            .process(AlertProcessor(price_threshold=0.05, volume_multiplier=2.0))
-        )
-        
-        # USE CASE 5: Multi-Symbol Analysis (NOT keyed - process all together)
-        multi_symbol_stream = (
-            base_stream
-            .process(MultiSymbolCorrelationProcessor())
-        )
-        
-        # USE CASE 6: Risk Metrics
-        risk_stream = (
-            base_stream
-            .key_by(lambda x: json.loads(x)['symbol'])
-            .process(RiskMetricsProcessor())
-        )
-        
+        logger.info("✅ OHLC Realtime processing set up.")
+
         # Union all streams and sink to Kafka
-        result_stream = (
-            ohlc_stream
-            .union(technical_stream)
-            .union(pattern_stream)
-            .union(alert_stream)
-            .union(multi_symbol_stream)
-            .union(risk_stream)
-        )
         
         # Print to console for debugging
-        result_stream.print()
+        ohlc_stream.print()
         
         # Sink to Kafka
-        result_stream.sink_to(self.sink)
+        ohlc_stream.sink_to(self.sink)
         
         logger.info("✅ Executing REALTIME stock processing pipeline...")
         self.env.execute("Realtime Stock Analysis Pipeline")
-
+        logger.info("✅ REALTIME stock processing pipeline execution finished.")
 
 if __name__ == "__main__":
     handler = FlinkStockHandler(

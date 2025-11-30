@@ -1,6 +1,4 @@
-
 services:
-
   kafka-controller:
     image: apache/kafka:4.0.0
     container_name: kafka-controller
@@ -73,33 +71,38 @@ services:
     networks:
       - seminar_project
 
-  cassandra:
-    image: cassandra:latest
-    container_name: cassandra
-    ports:
-      - "9042:9042"
-    environment:
-      MAX_HEAP_SIZE: 512M
-      HEAP_NEWSIZE: 100M
-      CASSANDRA_CLUSTER_NAME: "My Cluster"
-      CASSANDRA_USER: "admin"
-      CASSANDRA_PASSWORD: "admin"
-    volumes:
-      - ./cassandra_data:/var/lib/cassandra 
-    healthcheck:
-      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - seminar_project
+  # cassandra:
+  #   image: cassandra:latest
+  #   container_name: cassandra
+  #   ports:
+  #     - "9042:9042"
+  #   environment:
+  #     MAX_HEAP_SIZE: 512M
+  #     HEAP_NEWSIZE: 100M
+  #     CASSANDRA_CLUSTER_NAME: "My Cluster"
+  #     CASSANDRA_USER: "admin"
+  #     CASSANDRA_PASSWORD: "admin"
+  #   volumes:
+  #     - ./cassandra_data:/var/lib/cassandra 
+  #   healthcheck:
+  #     test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - seminar_project
 
   jobmanager:
-    image: flink:2.0
+    build:
+      context: .
+      dockerfile: Dockerfile 
     container_name: jobmanager
     ports:
       - "8081:8081"
     command: jobmanager
+    volumes:
+      - flink-checkpoints:/tmp/flink-checkpoints
+      - .:/opt/flink/prj
     environment:
       - |
         FLINK_PROPERTIES=
@@ -111,81 +114,82 @@ services:
       retries: 5
     networks:
       - seminar_project
+
   taskmanager:
-    image: flink:2.0
+    build:
+      context: .
+      dockerfile: Dockerfile 
     container_name: taskmanager
     depends_on:
       jobmanager:
         condition: service_healthy
     command: taskmanager
+    volumes:
+      - flink-checkpoints:/tmp/flink-checkpoints
+      - .:/opt/flink/prj
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        taskmanager.memory.process.size: 1728m
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep org.apache.flink.runtime.taskexecutor.TaskManagerRunner | grep -qv grep"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 20s
-    environment:
-      - |
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-        taskmanager.numberOfTaskSlots: 2
-
     networks:
       - seminar_project
-  main_app:
+
+  producer_app:
     build:
       context: .
       dockerfile: Dockerfile  
-    container_name: main_app
-    command: ["bash", "run.sh"]
+    container_name: producer_app
     volumes:
-      - .:/app
+      - .:/opt/flink/prj
+    entrypoint: ["bash", "-c", "cd /opt/flink/prj && chmod +x run_producer.sh && ./run_producer.sh"]
+
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka_broker:19092
     depends_on:
-      - kafka_broker
-      - cassandra
-      - jobmanager
-      - taskmanager
+      kafka_broker:
+        condition: service_started
+      # cassandra:
+      #   condition: service_healthy
+      jobmanager:
+        condition: service_healthy
+      taskmanager:
+        condition: service_healthy
     networks:
       - seminar_project
-  # sql-client:
-  #   image: flink:1.19.0
-  #   container_name: sql-client
-  #   depends_on:
-  #     jobmanager:
-  #       condition: service_healthy
-  #     taskmanager:
-  #       condition: service_healthy
-  #   environment:
-  #   - |
-  #     FLINK_PROPERTIES=
-  #     jobmanager.rpc.address: jobmanager
-  #     rest.address: jobmanager
-  #   networks:
-  #     - seminar_project
+  
+  processing_app:
+    build:
+      context: .
+      dockerfile: Dockerfile  
+    container_name: processing_app
+    volumes:
+      - .:/opt/flink/prj
+    entrypoint: ["bash", "-c", "cd /opt/flink/prj && chmod +x run_processing.sh && ./run_processing.sh"]
 
-  # sql-gateway:
-  #   image: flink:latest
-  #   container_name: sql-gateway
-  #   ports:
-  #     - "8083:8083"
-  #   command: >
-  #     ./bin/sql-gateway.sh start-foreground
-  #     -Dsql-gateway.endpoint.type=rest
-  #     -Dsql-gateway.endpoint.rest.address=localhost
-  #     -Dsql-gateway.endpoint.rest.port=8083
-  #     -Djobmanager.rpc.address=jobmanager
-  #   environment:
-  #       - |
-  #         FLINK_PROPERTIES=
-  #         jobmanager.rpc.address: jobmanager
-  #         rest.address: jobmanager
-  #   depends_on:
-  #     jobmanager:
-  #       condition: service_healthy
-  #     taskmanager:
-  #       condition: service_healthy
-  #   networks:
-  #     - seminar_project
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka_broker:19092
+      - FLINK_JOBMANAGER_ADDRESS=jobmanager:8081
+    depends_on:
+      kafka_broker:
+        condition: service_started
+      jobmanager:
+        condition: service_healthy
+      taskmanager:
+        condition: service_healthy
+    networks:
+      - seminar_project
+
 networks:
   seminar_project:
     driver: bridge
+
+volumes:
+  flink-checkpoints:
