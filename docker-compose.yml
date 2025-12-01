@@ -31,7 +31,7 @@ services:
     image: apache/kafka:4.0.0
     container_name: kafka_broker
     ports:
-      - "29092:9092"
+      - "29092:9092"   # host port -> container 9092
     restart: always
     environment:
       KAFKA_NODE_ID: 3
@@ -46,6 +46,10 @@ services:
     depends_on:
       - kafka-controller
       - kafka-controller-2
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'nc -z localhost 9092 || exit 1'"]
+      interval: 10s
+      retries: 10
     networks:
       - seminar_project
 
@@ -68,41 +72,23 @@ services:
     depends_on:
       - kafka-controller
       - kafka-controller-2
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'nc -z localhost 9092 || exit 1'"]
+      interval: 10s
+      retries: 10
     networks:
       - seminar_project
-
-  # cassandra:
-  #   image: cassandra:latest
-  #   container_name: cassandra
-  #   ports:
-  #     - "9042:9042"
-  #   environment:
-  #     MAX_HEAP_SIZE: 512M
-  #     HEAP_NEWSIZE: 100M
-  #     CASSANDRA_CLUSTER_NAME: "My Cluster"
-  #     CASSANDRA_USER: "admin"
-  #     CASSANDRA_PASSWORD: "admin"
-  #   volumes:
-  #     - ./cassandra_data:/var/lib/cassandra 
-  #   healthcheck:
-  #     test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - seminar_project
 
   jobmanager:
     build:
       context: .
-      dockerfile: Dockerfile 
+      dockerfile: Dockerfile
     container_name: jobmanager
     ports:
       - "8081:8081"
     command: jobmanager
     volumes:
       - flink-checkpoints:/tmp/flink-checkpoints
-      - .:/opt/flink/prj
     environment:
       - |
         FLINK_PROPERTIES=
@@ -118,7 +104,7 @@ services:
   taskmanager:
     build:
       context: .
-      dockerfile: Dockerfile 
+      dockerfile: Dockerfile
     container_name: taskmanager
     depends_on:
       jobmanager:
@@ -126,7 +112,6 @@ services:
     command: taskmanager
     volumes:
       - flink-checkpoints:/tmp/flink-checkpoints
-      - .:/opt/flink/prj
     environment:
       - |
         FLINK_PROPERTIES=
@@ -145,41 +130,38 @@ services:
   producer_app:
     build:
       context: .
-      dockerfile: Dockerfile  
+      dockerfile: Dockerfile
     container_name: producer_app
     volumes:
-      - .:/opt/flink/prj
-    entrypoint: ["bash", "-c", "cd /opt/flink/prj && chmod +x run_producer.sh && ./run_producer.sh"]
-
+      - ./script/:/opt/flink/script
+    entrypoint: ["bash", "-c", "cd /opt/flink/script && chmod +x run_producer.sh && ./run_producer.sh"]
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka_broker:19092
+      KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
     depends_on:
       kafka_broker:
-        condition: service_started
-      # cassandra:
-      #   condition: service_healthy
+        condition: service_healthy
       jobmanager:
         condition: service_healthy
       taskmanager:
         condition: service_healthy
     networks:
       - seminar_project
-  
+
   processing_app:
     build:
       context: .
-      dockerfile: Dockerfile  
+      dockerfile: Dockerfile
     container_name: processing_app
     volumes:
-      - .:/opt/flink/prj
-    entrypoint: ["bash", "-c", "cd /opt/flink/prj && chmod +x run_processing.sh && ./run_processing.sh"]
-
+      - ./script/:/opt/flink/script
+    entrypoint: ["bash", "-c", "cd /opt/flink/script && chmod +x run_processing.sh && ./run_processing.sh"]
+    
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka_broker:19092
-      - FLINK_JOBMANAGER_ADDRESS=jobmanager:8081
+      KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
+      FLINK_JOBMANAGER_ADDRESS: jobmanager:8081
     depends_on:
       kafka_broker:
-        condition: service_started
+        condition: service_healthy
       jobmanager:
         condition: service_healthy
       taskmanager:

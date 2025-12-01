@@ -10,6 +10,7 @@ from datetime import datetime
 import json
 import logging
 from collections import deque
+from pyflink.common import Configuration
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -28,40 +29,42 @@ class StockTimestampAssigner(TimestampAssigner):
 # USE CASE 1: TIME-BASED AGGREGATIONS (OHLC Resampling) - REALTIME
 # ============================================================================
 class OHLCRealtimeProcessor(KeyedProcessFunction):
-    """
-    Realtime OHLC aggregation - outputs on every tick with current window state
-    Maintains sliding windows: 1min, 5min, 15min
-    """
-    
+
     def open(self, runtime_context):
-        self.windows = {}  # {symbol: {timeframe: {open, high, low, close, volume, start_time}}}
-    
+        # MapState: timeframe -> window data
+        descriptor = MapStateDescriptor(
+            "ohlc_state",
+            Types.STRING(),   # key: '1min', '5min', ...
+            Types.PICKLED_BYTE_ARRAY()  # value: dictionary
+        )
+        self.state = runtime_context.get_map_state(descriptor)
+
     def process_element(self, value, ctx):
         data = json.loads(value) if isinstance(value, str) else value
+
         symbol = data['symbol']
         price = float(data['close'])
         high = float(data['high'])
         low = float(data['low'])
         volume = float(data.get('volume', 0))
-        
+
         current_time = ctx.timestamp()
-        
-        if symbol not in self.windows:
-            self.windows[symbol] = {}
-        
-        # Define timeframes in milliseconds
+
         timeframes = {
             '1min': 60 * 1000,
             '5min': 5 * 60 * 1000,
             '15min': 15 * 60 * 1000
         }
-        
+
         for tf_name, tf_ms in timeframes.items():
             window_start = (current_time // tf_ms) * tf_ms
-            
-            # Initialize or reset window
-            if tf_name not in self.windows[symbol] or self.windows[symbol][tf_name]['start_time'] != window_start:
-                self.windows[symbol][tf_name] = {
+
+            # load state
+            window = self.state.get(tf_name)
+
+            # initialize
+            if window is None or window['start_time'] != window_start:
+                window = {
                     'open': price,
                     'high': high,
                     'low': low,
@@ -71,30 +74,29 @@ class OHLCRealtimeProcessor(KeyedProcessFunction):
                     'count': 1
                 }
             else:
-                # Update existing window
-                window = self.windows[symbol][tf_name]
                 window['high'] = max(window['high'], high)
                 window['low'] = min(window['low'], low)
                 window['close'] = price
                 window['volume'] += volume
                 window['count'] += 1
-        
-        # Output all timeframes
-        for tf_name, window_data in self.windows[symbol].items():
+            
+            # save back
+            self.state.put(tf_name, window)
+
+            # output result
             result = {
                 'symbol': symbol,
                 'timeframe': tf_name,
-                'open': round(window_data['open'], 2),
-                'high': round(window_data['high'], 2),
-                'low': round(window_data['low'], 2),
-                'close': round(window_data['close'], 2),
-                'volume': round(window_data['volume'], 2),
-                'tick_count': window_data['count'],
+                'open': round(window['open'], 2),
+                'high': round(window['high'], 2),
+                'low': round(window['low'], 2),
+                'close': round(window['close'], 2),
+                'volume': round(window['volume'], 2),
+                'tick_count': window['count'],
                 'type': 'ohlc_realtime'
             }
-            yield json.dumps(result)
 
-
+            ctx.output(result) 
 # ============================================================================
 # USE CASE 2: TECHNICAL INDICATORS - OPTIMIZED FOR REALTIME
 # ============================================================================
@@ -513,8 +515,21 @@ class FlinkStockHandler:
         self.topic_out = topic_out
         self.kafka_servers = kafka_servers
         self.env = StreamExecutionEnvironment.get_execution_environment()
-        self.env.add_jars("file:///opt/flink/opt/flink-connector-kafka-4.0.0-2.0.jar","file:///opt/flink/opt/kafka-clients-4.0.0.jar")
+        config = Configuration()
+        
+
+        config.set_string("jobmanager.rpc.address", "jobmanager")
+        config.set_string("jobmanager.rpc.port", "6123")
+        config.set_string("rest.port", "8081")
+        config.set_string("pipeline.jars","file:///opt/flink/lib/flink-connector-kafka-4.0.0-2.0.jar")
+
+        config.set_string("python.fn-execution.bundle.size", "1000")
+        self.env = StreamExecutionEnvironment.get_execution_environment(config)
+
+        self.env.set_parallelism(1)
+        
         self.env.enable_checkpointing(5000)
+
         self.source = (
             KafkaSource.builder()
             .set_bootstrap_servers(self.kafka_servers)
