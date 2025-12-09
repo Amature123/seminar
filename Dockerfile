@@ -25,7 +25,6 @@ RUN pip3 install --upgrade pip setuptools wheel
 COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && \
     pip3 install --no-cache-dir \
-        git+https://github.com/thinh-vu/vnstock \
         "numpy<1.25.0"
 
 

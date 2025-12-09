@@ -24,7 +24,6 @@ submit_flink_job() {
             -m jobmanager:8081 \
             -py "$SCRIPT" \
             -pyexec /usr/bin/python3.11 \
-            --pyFiles /opt/flink/script \
             -D execution.checkpointing.unaligned=true \
             -D state.checkpoints.dir="file:///tmp/checkpoints"
         EXIT_CODE=$?

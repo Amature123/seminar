@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 from kafka import KafkaProducer
 from vnstock import Company
-
+from utils import symbol_list
 
 
 logging.basicConfig(
@@ -38,8 +38,8 @@ class KafkaNewsProduct:
 
     def extract_stock_data(self, symbol, start_date=None, end_date=None):
         today = datetime.now().strftime("%Y-%m-%d")
-        start_date = start_date or datetime.now().strftime("%Y-%m-%d")
-        end_date = end_date or datetime.now().strftime("%Y-%m-%d")
+        start_date = start_date or today
+        end_date = end_date or today
         
         try:
             company = Company(symbol=symbol, source=self.source)
@@ -101,11 +101,11 @@ if __name__ == "__main__":
         topic='news_data',
         bootstrap_servers='kafka_broker:19092'
     )
-    symbols = ['tcb', 'vci', 'vcb', 'acb', 'tpb']
+    symbols = symbol_list
     logger.info("Starting Kafka producer for symbols: %s", symbols)
     while True:
         try:
-            producer.run(symbols, sleep_time=60) 
+            producer.run(symbols, sleep_time=3600) 
         except KeyboardInterrupt:
             logger.info("Producer stopped by user")
         finally:

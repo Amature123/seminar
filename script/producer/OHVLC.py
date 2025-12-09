@@ -1,11 +1,14 @@
 import json
+from math import log
 import time
 import uuid
 import logging
 import numpy as np
 from datetime import datetime
 from kafka import KafkaProducer
-from vnstock import Quote
+from vnstock import Quote,Trading
+import time
+from utils import symbol_list
 
 
 logging.basicConfig(
@@ -22,7 +25,11 @@ class KafkaUserDataProducer:
             bootstrap_servers=[bootstrap_servers],
             value_serializer=lambda v: json.dumps(v, default=self.json_serializer).encode('utf-8')
         )
-        self.source = 'tcbs'
+        try : 
+            Trading(symbol='VN30F1M',source='vci')
+            self.source = 'vci'
+        except Exception:
+            self.source = 'tcbs'
         self.checkpoint = {}
 
     def json_serializer(self, data):
@@ -32,31 +39,26 @@ class KafkaUserDataProducer:
             return str(data)
         raise TypeError(f"Type {type(data)} not serializable")
 
-
     def delivery_report(self, record_metadata):
         logger.info(f"Message delivered to {record_metadata.topic} [{record_metadata.partition}] at offset {record_metadata.offset}")
 
     def extract_stock_data(self, symbol, start_date=None, end_date=None):
         today = datetime.now().strftime("%Y-%m-%d")
-        start_date = start_date or datetime.now().strftime("%Y-%m-%d")
-        end_date = end_date or datetime.now().strftime("%Y-%m-%d")
-        
+        start_date = start_date or today
+        end_date = end_date or today
         try:
-            quote = Quote(symbol=symbol, source=self.source)
-            data = quote.history(start=start_date, end=end_date, interval='1m')
-            
-            if data.empty:
-                logger.warning(f"No data returned for {symbol}")
-                return None
-            
+            quote = Quote(symbol=symbol, source='vci')
+            OHVCL = quote.history(start=start_date, end=end_date, interval='1m')
             record = {
                 "symbol": symbol,
-                "time": data["time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                "open": data["open"].iloc[-1],
-                "high": data["high"].iloc[-1],
-                "low": data["low"].iloc[-1],
-                "close": data["close"].iloc[-1],
-                "volume": data["volume"].iloc[-1],
+                "OHVCL": {
+                    "time": OHVCL["time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                    "open": OHVCL["open"].iloc[-1],
+                    "high": OHVCL["high"].iloc[-1],
+                    "low": OHVCL["low"].iloc[-1],
+                    "close": OHVCL["close"].iloc[-1],
+                    "volume": OHVCL["volume"].iloc[-1],
+                }
             }
             
             record = {k: (v.item() if isinstance(v, np.generic) else v) for k, v in record.items()}
@@ -85,11 +87,11 @@ class KafkaUserDataProducer:
                     record = self.extract_stock_data(symbol)
                     last_seen = self.checkpoint.get(symbol)
                     
-                    if record and last_seen != record["time"]:
+                    if record and last_seen != record['OHVCL']["time"]:
                         self.produce_messages(record)
                         logger.info(f"Record to be sent: {record}")
-                        self.checkpoint[symbol] = record["time"]
-                        logger.info(f"Produced message for {symbol} at {record['time']}")
+                        self.checkpoint[symbol] = record['OHVCL']["time"]
+                        logger.info(f"Produced message for {symbol} at {record['OHVCL']['time']}")
                     else:
                         logger.info(f"No new data for {symbol}. Last seen: {last_seen}")
                         
@@ -102,17 +104,17 @@ class KafkaUserDataProducer:
             
         except Exception as e:
             logger.error(f"Error at procedure: {e}")
+
 if __name__ == "__main__":
     producer = KafkaUserDataProducer(
-        topic='stock_data',
+        topic='ohvcl_data',
         bootstrap_servers='kafka_broker:19092'
     )
-    symbols = ['tcb', 'vci', 'vcb', 'acb', 'tpb']
+    
+    symbols = symbol_list
     logger.info("Starting Kafka producer for symbols: %s", symbols)
     while True:
         try:
-            producer.run(symbols, sleep_time=10) 
+            producer.run(symbols, sleep_time=30) 
         except KeyboardInterrupt:
             logger.info("Producer stopped by user")
-        finally:
-            producer.producer.close()
