@@ -9,15 +9,16 @@ from kafka import KafkaProducer
 from vnstock import Quote,Trading
 import time
 from utils import symbol_list
+from zoneinfo import ZoneInfo
 
-
+vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-class KafkaUserDataProducer:
+class KafkaTradingProducer:
     def __init__(self, topic='stock_data', bootstrap_servers='localhost:9092'):
         self.topic = topic
         
@@ -42,14 +43,14 @@ class KafkaUserDataProducer:
     def delivery_report(self, record_metadata):
         logger.info(f"Message delivered to {record_metadata.topic} [{record_metadata.partition}] at offset {record_metadata.offset}")
 
-    def extract_stock_data(self, symbol, start_date=None, end_date=None):
-        today = datetime.now().strftime("%Y-%m-%d")
-        start_date = start_date or today
-        end_date = end_date or today
+    def extract_stock_data(self, symbol):
+        handle_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
         try:
             trading = Trading(symbol='VN30F1M',source='vci')
             board = trading.price_board([symbol.upper()])
+            logger.info(f"Fetched data for {symbol}: {board.listing.sending_time[0]}")
             record = {
+                "handle_time":handle_time.strftime("%Y-%m-%d %H:%M:%S"),
                 "symbol": symbol,
                 "ceiling": board.listing.ceiling[0] if board.listing is not None else None,
                 "floor": board.listing.floor[0] if board.listing is not None else None,
@@ -73,9 +74,11 @@ class KafkaUserDataProducer:
                     "Sell_3": board.bid_ask.ask_3_price[0] if board.bid_ask is not None else None,
                     "Sell_3_volume": board.bid_ask.ask_3_volume[0] if board.bid_ask is not None else None,
                 },
-                
-                }
-            
+                "highest" : board.match.highest[0] if board.match is not None else None,
+                "lowest" :board.match.lowest[0] if board.match is not None else None,
+                "average": (board.match.highest[0] + board.match.lowest[0])/2 if board.match is not None else None,
+            }
+            logger.info(f"Fetched data for {symbol}: {record}")
             record = {k: (v.item() if isinstance(v, np.generic) else v) for k, v in record.items()}
             return record
             
@@ -100,19 +103,10 @@ class KafkaUserDataProducer:
             for symbol in symbols:
                 try:
                     record = self.extract_stock_data(symbol)
-                    last_seen = self.checkpoint.get(symbol)
-                    
-                    if record and last_seen != record['OHVCL']["time"]:
-                        self.produce_messages(record)
-                        logger.info(f"Record to be sent: {record}")
-                        self.checkpoint[symbol] = record['OHVCL']["time"]
-                        logger.info(f"Produced message for {symbol} at {record['OHVCL']['time']}")
-                    else:
-                        logger.info(f"No new data for {symbol}. Last seen: {last_seen}")
-                        
+                    self.produce_messages(record)
+                    logger.info(f"Record to be sent: {record}")
                 except Exception as e:
                     logger.error(f"Error in producing loop for {symbol}: {e}")
-            
             self.producer.flush()
             logger.info("All messages sent.")
             time.sleep(sleep_time)
@@ -121,8 +115,8 @@ class KafkaUserDataProducer:
             logger.error(f"Error at procedure: {e}")
 
 if __name__ == "__main__":
-    producer = KafkaUserDataProducer(
-        topic='stock_data',
+    producer = KafkaTradingProducer(
+        topic='trading_data',
         bootstrap_servers='kafka_broker:19092'
     )
     
@@ -130,6 +124,6 @@ if __name__ == "__main__":
     logger.info("Starting Kafka producer for symbols: %s", symbols)
     while True:
         try:
-            producer.run(symbols, sleep_time=30) 
+            producer.run(symbols, sleep_time=60) 
         except KeyboardInterrupt:
             logger.info("Producer stopped by user")

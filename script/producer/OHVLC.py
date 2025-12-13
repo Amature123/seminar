@@ -9,18 +9,18 @@ from kafka import KafkaProducer
 from vnstock import Quote,Trading
 import time
 from utils import symbol_list
+from zoneinfo import ZoneInfo
 
-
+vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-class KafkaUserDataProducer:
+class KafkaOHVLCProducer:
     def __init__(self, topic='stock_data', bootstrap_servers='localhost:9092'):
         self.topic = topic
-        
         self.producer = KafkaProducer(
             bootstrap_servers=[bootstrap_servers],
             value_serializer=lambda v: json.dumps(v, default=self.json_serializer).encode('utf-8')
@@ -30,7 +30,6 @@ class KafkaUserDataProducer:
             self.source = 'vci'
         except Exception:
             self.source = 'tcbs'
-        self.checkpoint = {}
 
     def json_serializer(self, data):
         if isinstance(data, (np.integer, np.floating)):
@@ -43,7 +42,7 @@ class KafkaUserDataProducer:
         logger.info(f"Message delivered to {record_metadata.topic} [{record_metadata.partition}] at offset {record_metadata.offset}")
 
     def extract_stock_data(self, symbol, start_date=None, end_date=None):
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(vietnamese_timezone).strftime("%Y-%m-%d")
         start_date = start_date or today
         end_date = end_date or today
         try:
@@ -67,7 +66,6 @@ class KafkaUserDataProducer:
         except Exception as e:
             logger.error(f"Error fetching data for {symbol}: {e}")
             return None
-
     def produce_messages(self, record):
         try:
 
@@ -80,24 +78,14 @@ class KafkaUserDataProducer:
 
     def run(self, symbols, sleep_time=10):
         logger.info(f"Producing messages for symbols: {symbols}")
-        
         try:
             for symbol in symbols:
                 try:
                     record = self.extract_stock_data(symbol)
-                    last_seen = self.checkpoint.get(symbol)
-                    
-                    if record and last_seen != record['OHVCL']["time"]:
-                        self.produce_messages(record)
-                        logger.info(f"Record to be sent: {record}")
-                        self.checkpoint[symbol] = record['OHVCL']["time"]
-                        logger.info(f"Produced message for {symbol} at {record['OHVCL']['time']}")
-                    else:
-                        logger.info(f"No new data for {symbol}. Last seen: {last_seen}")
-                        
+                    self.produce_messages(record)
+                    logger.info(f"Record to be sent: {record}")
                 except Exception as e:
-                    logger.error(f"Error in producing loop for {symbol}: {e}")
-            
+                    logger.error(f"Error in producing loop for {symbol}: {e}")           
             self.producer.flush()
             logger.info("All messages sent.")
             time.sleep(sleep_time)
@@ -106,7 +94,7 @@ class KafkaUserDataProducer:
             logger.error(f"Error at procedure: {e}")
 
 if __name__ == "__main__":
-    producer = KafkaUserDataProducer(
+    producer = KafkaOHVLCProducer(
         topic='ohvcl_data',
         bootstrap_servers='kafka_broker:19092'
     )

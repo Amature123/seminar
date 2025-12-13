@@ -2,6 +2,7 @@ CREATE KEYSPACE IF NOT EXISTS market
 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};
 
 CREATE TABLE IF NOT EXISTS market.trading_data (
+    handle_time timestamp,
     symbol text,
     ceiling double,
     floor double,
@@ -21,8 +22,10 @@ CREATE TABLE IF NOT EXISTS market.trading_data (
     sell_2_volume double,
     sell_3 double,
     sell_3_volume double,
+    highest double,
+    lowest double,
     average double,
-    PRIMARY KEY (symbol, time)
+    PRIMARY KEY (symbol, handle_time)
 );
 
 CREATE TABLE IF NOT EXISTS market.OHVLC (
@@ -33,7 +36,7 @@ CREATE TABLE IF NOT EXISTS market.OHVLC (
     low double,
     close double,
     volume double,
-    PRIMARY KEY (symbol, time)
+    PRIMARY KEY (symbol, handle_time)
 );
 
 CREATE TABLE IF NOT EXISTS market.news (

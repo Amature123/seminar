@@ -15,14 +15,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("stock_consumer")
 
-class StockDataConsumer:
+class CassandraImplement:
     def __init__(self):
         self.bootstrap_servers = ['kafka_broker:19092','kafka_broker_1:19092','kafka_broker_2:19092']
         self.cassandra_hosts = ['cassandra']
         self.keyspace = 'market'
         self.connect_cassandra()
         self.prepare_statements()
-
 
     def transform_record(self, record):
         if isinstance(record,datetime):
@@ -37,50 +36,65 @@ class StockDataConsumer:
         try:
             self.cluster = Cluster(self.cassandra_hosts)
             self.session = self.cluster.connect(self.keyspace)
-            time.sleep(5) 
+            time.sleep(10) 
             logger.info("Connected to Cassandra")
         except NoHostAvailable as e:
             logger.error(f"Could not connect to Cassandra: {e}")
             raise
 
-    def prepare_statements(self):
-        self.insert_stock = self.session.prepare("""
-            INSERT INTO stock_data (
-                symbol, time, open, high, low, close, volume,
-                ceiling, floor, reference, room_foreign,
-                foreign_buy_volume, foreign_sell_volume,
-                buy_1, buy_1_volume, buy_2, buy_2_volume, buy_3, buy_3_volume,
-                sell_1, sell_1_volume, sell_2, sell_2_volume, sell_3, sell_3_volume,
-                average
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """)
-        # self.insert_new = self.session.prepare("""
-        #     INSERT INTO news_data (symbol, id, title, publish_date)
-        #     VALUES (?, ?, ?, ?)
-        # """)
+def prepare_statements(self):
+    self.insert_trading = self.session.prepare("""
+        INSERT INTO market.trading_data (
+            symbol,
+            handle_time,
+            ceiling, floor, reference,
+            room_foreign,
+            foreign_buy_volume, foreign_sell_volume,
+            buy_1, buy_1_volume,
+            buy_2, buy_2_volume,
+            buy_3, buy_3_volume,
+            sell_1, sell_1_volume,
+            sell_2, sell_2_volume,
+            sell_3, sell_3_volume,
+            highest, lowest, average
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+    """)
+    self.insert_ohlvc = self.session.prepare("""
+        INSERT INTO market.OHVLC (
+            symbol, time, open, high, low, close, volume
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """)
+
+    self.insert_news = self.session.prepare("""
+        INSERT INTO market.news (
+            symbol, id, title, publish_date
+        ) VALUES (?, ?, ?, ?)
+    """)
 
     def kafka_consumer(self):
         logger.info("Setting up Kafka consumers...")
         try:
             self.consumer1 = KafkaConsumer(
-                'stock_data',
+                'ohvcl_data',
                 bootstrap_servers=['kafka_broker:19092','kafka_broker_1:19092','kafka_broker_2:19092'],
                 auto_offset_reset='earliest',
                 enable_auto_commit=False,
                 group_id='stock-data-group',
                 value_deserializer=lambda x: json.loads(x.decode('utf-8'))
             )
+            self.consumer2= KafkaConsumer(
+                'trading_data',
+                bootstrap_servers=['kafka_broker:19092','kafka_broker_1:19092','kafka_broker_2:19092'],
+                auto_offset_reset='earliest',
+                enable_auto_commit=False,
+                group_id='trading-data-group',
+                value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+            )
         except Exception as e:
             logger.error(f"Error setting up Kafka consumer: {e}")
             raise
-        # self.consumer2 = KafkaConsumer(
-        #     'news_data',
-        #     bootstrap_servers=['kafka_broker:19092','kafka_broker_1:19092','kafka_broker_2:19092'],
-        #     auto_offset_reset='earliest',  
-        #     enable_auto_commit=True,
-        #     group_id='news-group',
-        #     value_deserializer=lambda x: json.loads(x.decode('utf-8'))
-        # )
     def insert_data(self,record = None):
         main_session = self.session
         if record is None:
@@ -146,18 +160,3 @@ class StockDataConsumer:
                 
             except Exception as e:
                 logger.error(f"Error consuming messages: {e}")
-
-def run():
-    while True:
-        try:
-            logger.info("Starting Kafka consumer for stock data...")
-            database = StockDataConsumer()
-            database.kafka_consumer()
-            database.cosume_data(database.consumer1)
-        except Exception as e:
-            logger.error(f"Fatal error in consumer: {e}")
-            logger.info("Restarting consumer in 5 seconds...")
-            time.sleep(5)
-
-if __name__ == "__main__":
-    run()

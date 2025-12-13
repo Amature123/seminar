@@ -42,12 +42,14 @@ done
 echo -e "${GREEN}✓ Kafka ready!${NC}"
 
 # Start producers
-run_script_with_restart /opt/flink/script/producer/production.py &
+run_script_with_restart /opt/flink/script/producer/OHVLC.py &
 PID_PROD=$!
 
-run_script_with_restart /opt/flink/script/producer/newsProduction.py &
-PID_NEWS=$!
+run_script_with_restart /opt/flink/script/producer/trading.py &
+PID_TRADING=$!
 
+# run_script_with_restart /opt/flink/script/producer/newsProduction.py &
+# PID_NEWS=$!
 trap "echo 'Stopping...'; kill $PID_PROD $PID_NEWS" SIGTERM SIGINT
 
 wait
