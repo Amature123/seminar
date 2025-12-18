@@ -261,7 +261,7 @@ services:
     container_name: stock_consumer
     volumes:
       - ./script/:/opt/flink/script
-    entrypoint: ["bash", "-c", "cd /opt/flink/script && python add_to.py"]
+    entrypoint: ["bash", "-c", "cd /opt/flink/script/processing && python OHVLC_handler.py"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
       CASSANDRA_HOST: cassandra

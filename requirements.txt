@@ -9,4 +9,4 @@ tenacity
 cassandra-driver
 apache-flink==2.0.0
 vnstock
-bokehbokeh
+bokeh

@@ -50,14 +50,12 @@ class KafkaOHVLCProducer:
             OHVCL = quote.history(start=start_date, end=end_date, interval='1m')
             record = {
                 "symbol": symbol,
-                "OHVCL": {
-                    "time": OHVCL["time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                    "open": OHVCL["open"].iloc[-1],
-                    "high": OHVCL["high"].iloc[-1],
-                    "low": OHVCL["low"].iloc[-1],
-                    "close": OHVCL["close"].iloc[-1],
-                    "volume": OHVCL["volume"].iloc[-1],
-                }
+                "time": OHVCL["time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                "open": OHVCL["open"].iloc[-1],
+                "high": OHVCL["high"].iloc[-1],
+                "low": OHVCL["low"].iloc[-1],
+                "close": OHVCL["close"].iloc[-1],
+                "volume": OHVCL["volume"].iloc[-1]
             }
             
             record = {k: (v.item() if isinstance(v, np.generic) else v) for k, v in record.items()}
