@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger("stock_consumer")
 
 
-class CassandraImplement:
+class OHVLC:
     def __init__(self):
         self.bootstrap_servers = [
             'kafka_broker:19092',
@@ -23,8 +23,6 @@ class CassandraImplement:
         self.keyspace = 'market'
 
         self.connect_cassandra()
-        self.prepare_statements()
-        self.kafka_consumer()
 
     def connect_cassandra(self):
         while True:
@@ -62,6 +60,7 @@ class CassandraImplement:
         )
 
     def insert_data(self, record: dict):
+        self.prepare_statements()
         try:
             self.session.execute(self.insert_ohlvc, (
                 record['symbol'],
@@ -80,6 +79,7 @@ class CassandraImplement:
 
     def consume_data(self, wait=5):
         logger.info("Start consuming data...")
+        self.kafka_consumer()
         while True:
             try:
                 records = self.consumer.poll(timeout_ms=3000)
@@ -102,5 +102,5 @@ class CassandraImplement:
                 time.sleep(3)
 
 if __name__ == "__main__":
-    app = CassandraImplement()
+    app = OHVLC()
     app.consume_data()

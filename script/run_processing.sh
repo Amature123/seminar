@@ -25,10 +25,10 @@ run_script_with_restart() {
     done
 }
 
-run_script_with_restart /opt/flink/script/processing/OHVLC_handler.py &
+run_script_with_restart /app/processing/OHVLC_handler.py &
 PID_OHVLC=$!
 
-run_script_with_restart /opt/flink/script/processing/trading_handler.py &
+run_script_with_restart /app/processing/trading_handler.py &
 PID_TRADING=$!
 
 trap "echo 'Stopping...'; kill $PID_OHVLC $PID_NEWS" SIGTERM SIGINT

@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger("stock_consumer")
 
 
-class CassandraImplement:
+class Trading:
     def __init__(self):
         self.bootstrap_servers = [
             'kafka_broker:19092',
@@ -23,8 +23,7 @@ class CassandraImplement:
         self.keyspace = 'market'
 
         self.connect_cassandra()
-        self.prepare_statements()
-        self.kafka_consumer()
+
 
     def connect_cassandra(self):
         while True:
@@ -85,6 +84,7 @@ class CassandraImplement:
         )
 
     def insert_data(self, record: dict):
+        self.prepare_statements()
         if not record:
             logger.info(f"Empty record")
             return
@@ -125,6 +125,7 @@ class CassandraImplement:
 
 
     def consume_data(self, wait=5):
+        self.kafka_consumer()
         logger.info("Start consuming data...")
         while True:
             try:
@@ -148,5 +149,5 @@ class CassandraImplement:
                 time.sleep(3)
 
 if __name__ == "__main__":
-    app = CassandraImplement()
+    app = Trading()
     app.consume_data()

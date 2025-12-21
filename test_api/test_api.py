@@ -8,9 +8,8 @@
 # # quote = Quote(symbol='ACB', source='vci')
 # # OHVCL = quote.history(start="2025-12-10", end='2025-12-10', interval='1m')
 # # print(OHVCL.iloc[-1])
-
+from vnstock import Quote
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 vn_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-print(vn_time)

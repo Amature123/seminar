@@ -134,53 +134,54 @@ services:
       retries: 10
     networks:
       - seminar_project
-  jobmanager:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: jobmanager
-    ports:
-      - "8081:8081"
-    command: jobmanager
-    volumes:
-      - flink-checkpoints:/tmp/flink-checkpoints
-    environment:
-      - |
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - seminar_project
 
-  taskmanager:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: taskmanager
-    depends_on:
-      jobmanager:
-        condition: service_healthy
-    command: taskmanager
-    volumes:
-      - flink-checkpoints:/tmp/flink-checkpoints
-    environment:
-      - |
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-        taskmanager.numberOfTaskSlots: 4
-        taskmanager.memory.process.size: 1728m
-    healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep org.apache.flink.runtime.taskexecutor.TaskManagerRunner | grep -qv grep"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    networks:
-      - seminar_project
+  # jobmanager:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: jobmanager
+  #   ports:
+  #     - "8081:8081"
+  #   command: jobmanager
+  #   volumes:
+  #     - flink-checkpoints:/tmp/flink-checkpoints
+  #   environment:
+  #     - |
+  #       FLINK_PROPERTIES=
+  #       jobmanager.rpc.address: jobmanager
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:8081 || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - seminar_project
+
+  # taskmanager:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: taskmanager
+  #   depends_on:
+  #     jobmanager:
+  #       condition: service_healthy
+  #   command: taskmanager
+  #   volumes:
+  #     - flink-checkpoints:/tmp/flink-checkpoints
+  #   environment:
+  #     - |
+  #       FLINK_PROPERTIES=
+  #       jobmanager.rpc.address: jobmanager
+  #       taskmanager.numberOfTaskSlots: 4
+  #       taskmanager.memory.process.size: 1728m
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "ps aux | grep org.apache.flink.runtime.taskexecutor.TaskManagerRunner | grep -qv grep"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 20s
+  #   networks:
+  #     - seminar_project
 
   producer_app:
     build:
@@ -188,17 +189,17 @@ services:
       dockerfile: Dockerfile
     container_name: producer_app
     volumes:
-      - ./script/:/opt/flink/script
-    entrypoint: ["bash", "-c", "cd /opt/flink/script && chmod +x run_producer.sh && ./run_producer.sh"]
+      - ./script/:/app
+    entrypoint: ["bash", "-c", "cd /app && chmod +x run_producer.sh && ./run_producer.sh"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
     depends_on:
       kafka_broker:
         condition: service_healthy
-      jobmanager:
-        condition: service_healthy
-      taskmanager:
-        condition: service_healthy
+      # jobmanager:
+      #   condition: service_healthy
+      # taskmanager:
+      #   condition: service_healthy
     networks:
       - seminar_project
 
@@ -208,18 +209,18 @@ services:
       dockerfile: Dockerfile
     container_name: processing_app
     volumes:
-      - ./script/:/opt/flink/script
-    entrypoint: ["bash", "-c", "cd /opt/flink/script && chmod +x run_processing.sh && ./run_processing.sh"]
+      - ./script/:/app
+    entrypoint: ["bash", "-c", "cd /app && chmod +x run_processing.sh && ./run_processing.sh"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
       FLINK_JOBMANAGER_ADDRESS: jobmanager:8081
     depends_on:
       kafka_broker:
         condition: service_healthy
-      jobmanager:
-        condition: service_healthy
-      taskmanager:
-        condition: service_healthy
+      # jobmanager:
+      #   condition: service_healthy
+      # taskmanager:
+      #   condition: service_healthy
     networks:
       - seminar_project
 
@@ -232,7 +233,6 @@ services:
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 100M
       CASSANDRA_CLUSTER_NAME: "My Cluster"
-
     volumes:
       - ./cassandra_data:/var/lib/cassandra 
     healthcheck:
@@ -253,21 +253,17 @@ services:
     command: /bin/bash -c "sleep 8 && echo loading cassandra keyspace && cqlsh cassandra -f /jobs.cql"
     networks:
       - seminar_project
-  
-  stock_consumer:
+    
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stock_consumer
-    volumes:
-      - ./script/:/opt/flink/script
-    entrypoint: ["bash", "-c", "cd /opt/flink/script/processing && python OHVLC_handler.py"]
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
-      CASSANDRA_HOST: cassandra
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes: 
+      - ./script/:/app
+    ports:
+      - "8000:8000"
     depends_on:
-      kafka_broker:
-        condition: service_healthy
       cassandra:
         condition: service_healthy
     networks:
@@ -277,5 +273,5 @@ networks:
   seminar_project:
     driver: bridge
 
-volumes:
-  flink-checkpoints:
+# volumes:
+#   flink-checkpoints:

@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS market.trading_data (
     lowest double,
     average double,
     PRIMARY KEY (symbol, handle_time)
-);
+)WITH CLUSTERING ORDER BY (handle_time DESC);
 
 CREATE TABLE IF NOT EXISTS market.OHVLC (
     symbol text,
@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS market.OHVLC (
     low double,
     close double,
     volume double,
-    PRIMARY KEY (symbol, handle_time)
-);
+    PRIMARY KEY (symbol, time)
+)WITH CLUSTERING ORDER BY (time DESC);
 
 CREATE TABLE IF NOT EXISTS market.news (
     symbol text,
