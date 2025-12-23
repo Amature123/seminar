@@ -35,4 +35,4 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 #     wget -q https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/4.0.0/kafka-clients-4.0.0.jar \
 #          -P /opt/flink/lib
 # Expose ports for FastAPI
-EXPOSE 8000
+EXPOSE 8501

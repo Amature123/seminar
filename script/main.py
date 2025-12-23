@@ -1,7 +1,5 @@
 # api/main.py
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Depends, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from cassandra.cluster import Cluster, NoHostAvailable
 from cassandra.query import dict_factory
 import logging
@@ -9,8 +7,9 @@ import time
 from typing import Optional, List
 import pandas as pd
 from zoneinfo import ZoneInfo
-
-
+import streamlit as st
+from lightweight_charts.widgets import StreamlitChart
+from utils import SYMBOLS
 vn_zone = ZoneInfo("Asia/Ho_Chi_Minh")
 logging.basicConfig(
     level=logging.INFO,
@@ -18,17 +17,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ohlvc_api")
 
-app = FastAPI(title="OHVLC Analytics API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-SYMBOLS =["ACB","BCM","BID","CTG","DGC","FPT","GAS","GVR","HDB","HPG",
-"TCB","TPB","VCB","VHM","VIB","VIC","VJC","VNM","VPB","VRE"]
 
 CASSANDRA_HOSTS = ["cassandra"]
 KEYSPACE = "market"
@@ -50,16 +38,12 @@ def get_db():
     finally:
         session.shutdown()
 
-def get_latest_all_symbols(
-    session,
-    symbols: List[str],
-    limit_per_symbol: int = 1
-):
+def get_latest_all_symbols(session,symbols,limit_per_symbol: int = 1):
     results = []
     for symbol in symbols:
         query = """
             SELECT symbol, time, open, high, low, close, volume
-            FROM OHVLC
+            FROM ohlvc
             WHERE symbol = %s
             LIMIT %s
         """
@@ -67,11 +51,7 @@ def get_latest_all_symbols(
         results.extend(rows)
     return results
 
-def get_latest_trading_all_symbols(
-    session,
-    symbols: List[str],
-    limit_per_symbol: int = 1
-):
+def get_latest_trading_all_symbols(session,symbols,limit_per_symbol: int = 1):
     results = []
     for symbol in symbols:
         query = """
@@ -106,54 +86,56 @@ def get_latest_trading_all_symbols(
         rows = session.execute(query, (symbol, limit_per_symbol))
         results.extend(rows)
     return results
+def stocks_to_str(stocks):
+    return ",".join(stocks)
 
+st.set_page_config(
+    page_title="Stock peer analysis dashboard",
+    page_icon=":chart_with_upwards_trend:",
+    layout="wide",
+)
 
-@app.get("/ohlvc/summary")
-def ohlvc_summary(
-    session = Depends(get_db)
-):
-    return get_latest_all_symbols(session, SYMBOLS, limit_per_symbol=1)
+"""
+# :material/query_stats: Stock peer analysis
 
-@app.get("/trading/summary")
-def tradig_summary(
-    session = Depends(get_db)
-):
-    return get_latest_trading_all_symbols(session, SYMBOLS, limit_per_symbol=1)
+Easily compare stocks against others in their peer group.
+"""
+""
 
-@app.get("/health")
-def health_check():
-    """
-    Health check + Cassandra
-    """
-    try:
-        cluster = Cluster(CASSANDRA_HOSTS)
-        session = cluster.connect(KEYSPACE)
-        session.execute("SELECT now() FROM system.local")
-        session.shutdown()
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+cols = st.columns([1, 3])
+DEFAULT_STOCKS = ['ACB', 'TCB', 'FPT', 'VCB']
 
-@app.get("/")
-def check_date():
-    date_now = datetime.now(vn_zone)
-    if date_now.weekday() in [5, 6]:
-        return {"message": "Market is closed, all data is last avalable from Friday"}
+if "tickers_input" not in st.session_state:
+    st.session_state.tickers_input = st.query_params.get(
+        "stocks", stocks_to_str(DEFAULT_STOCKS)
+    ).split(",")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
+def update_query_param():
+    if st.session_state.tickers_input:
+        st.query_params["stocks"] = stocks_to_str(st.session_state.tickers_input)
+    else:
+        st.query_params.pop("stocks", None)
+
+##Left panel: stock selector
+top_left_cell = cols[0].container(
+    border=True, height="stretch", vertical_alignment="center"
+)
+with top_left_cell:
+    tickers = st.multiselect(
+        "Stock tickers",
+        options=sorted(set(SYMBOLS) | set(st.session_state.tickers_input)),
+        default=st.session_state.tickers_input,
+        placeholder="Choose stocks to compare. Example: NVDA",
+        accept_new_options=True,
     )
+
+tickers = [t.upper() for t in tickers]
+
+if tickers:
+    st.query_params["stocks"] = stocks_to_str(tickers)
+else:
+    st.query_params.pop("stocks", None)
+if not tickers:
+    top_left_cell.info("Pick some stocks to compare", icon=":material/info:")
+    st.stop()
+##right panel: OHVLC chart

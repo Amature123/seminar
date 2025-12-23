@@ -11,5 +11,8 @@
 from vnstock import Quote
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
+from vnstock import Trading
 vn_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+trading = Trading(symbol='VN30F1M',source='vci')
+board = trading.price_board(['ACB'])
+board.head()

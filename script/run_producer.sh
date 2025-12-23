@@ -40,7 +40,10 @@ do
 done
 
 echo -e "${GREEN}✓ Kafka ready!${NC}"
-
+# Start batch jobs
+echo "🚀 Starting batch jobs..."
+python3 /app/producer/OHVLC_screener.py
+PID_BATCH=$!
 # Start producers
 run_script_with_restart /app/producer/OHVLC.py &
 PID_PROD=$!
@@ -48,8 +51,13 @@ PID_PROD=$!
 run_script_with_restart /app/producer/trading.py &
 PID_TRADING=$!
 
+
+(
+    wait $PID_BATCH
+    echo -e "${GREEN}✓ Batch OHVLC_screener finished${NC}"
+) &
 # run_script_with_restart /app/producer/newsProduction.py &
 # PID_NEWS=$!
-trap "echo 'Stopping...'; kill $PID_PROD $PID_NEWS" SIGTERM SIGINT
+trap "echo 'Stopping...'; kill $PID_PROD $PID_NEWS PID_BATCH" SIGTERM SIGINT
 
 wait

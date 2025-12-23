@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS market.trading_data (
     PRIMARY KEY (symbol, handle_time)
 )WITH CLUSTERING ORDER BY (handle_time DESC);
 
-CREATE TABLE IF NOT EXISTS market.OHVLC (
+CREATE TABLE IF NOT EXISTS market.ohlvc (
+    screener text,
     symbol text,
     time timestamp,
     open double,
@@ -36,8 +37,10 @@ CREATE TABLE IF NOT EXISTS market.OHVLC (
     low double,
     close double,
     volume double,
-    PRIMARY KEY (symbol, time)
-)WITH CLUSTERING ORDER BY (time DESC);
+    PRIMARY KEY ((screener, symbol), time)
+)
+WITH CLUSTERING ORDER BY (time DESC);
+
 
 CREATE TABLE IF NOT EXISTS market.news (
     symbol text,
