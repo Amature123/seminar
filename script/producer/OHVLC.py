@@ -8,10 +8,7 @@ from kafka import KafkaProducer
 from vnstock import Quote, Screener, Trading
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
-
-
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
-
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",

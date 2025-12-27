@@ -1,5 +1,5 @@
 CREATE KEYSPACE IF NOT EXISTS market
-WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};
+WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
 CREATE TABLE IF NOT EXISTS market.trading_data (
     handle_time timestamp,

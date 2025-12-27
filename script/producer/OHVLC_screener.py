@@ -1,3 +1,4 @@
+## Create some ticker for visualization
 import logging
 import time
 import numpy as np
@@ -9,7 +10,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 
-
+#
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -53,9 +54,6 @@ def prepare_statements(session):
     """)
 
 def fetch_1m(symbol, minutes=300):
-    """
-    minutes=300 ~ đủ rollup cho 1H * 24 candles
-    """
     today = datetime.now(vietnamese_timezone).strftime("%Y-%m-%d")
 
     try:

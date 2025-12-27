@@ -5,6 +5,10 @@ from kafka import KafkaConsumer
 from cassandra.cluster import Cluster, NoHostAvailable
 from datetime import datetime
 
+from vnstock import Screener
+from zoneinfo import ZoneInfo
+vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -19,10 +23,9 @@ BOOTSTRAP_SERVERS = [
 ]
 CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
-TOPIC = 'ohvcl_data'
+TOPIC = 'flink_computed_ohlc'
 GROUP_ID = 'ohvcl-consumer-group'
-
-
+SCREENER = ['5m', '15m', '30m', '1h']
 def connect_cassandra():
     while True:
         try:
@@ -34,13 +37,15 @@ def connect_cassandra():
             logger.warning("Cassandra not ready, retrying in 5s...")
             time.sleep(5)
 
-
 def prepare_statements(session):
     return session.prepare("""
         INSERT INTO market.ohlvc (
-            symbol, time, open, high, low, close, volume
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            screener, symbol, time, open, high, low, close, volume
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """)
+
+def screener_check(screener: str, message: dict):
+    return screener in SCREENER
 
 
 def transform_time(value):
@@ -48,10 +53,10 @@ def transform_time(value):
         return value
     return datetime.fromisoformat(value)
 
-
 def insert_data(session, insert_stmt, record: dict):
     try:
         session.execute(insert_stmt, (
+            record['screener'],
             record['symbol'],
             transform_time(record['time']),
             record['open'],
@@ -66,7 +71,6 @@ def insert_data(session, insert_stmt, record: dict):
     except Exception as e:
         logger.error(f"Cassandra insert error: {e}")
 
-
 def create_consumer():
     logger.info("Setting up Kafka consumer...")
     return KafkaConsumer(
@@ -79,7 +83,6 @@ def create_consumer():
         max_poll_records=100
     )
 
-
 def consume_data(session, insert_stmt, wait=5):
     consumer = create_consumer()
     logger.info("Start consuming data...")
@@ -87,26 +90,21 @@ def consume_data(session, insert_stmt, wait=5):
     while True:
         try:
             records = consumer.poll(timeout_ms=3000)
-
             if not records:
                 time.sleep(wait)
                 continue
-
             for tp, messages in records.items():
                 logger.info(
                     f"Processing {len(messages)} messages "
                     f"from {tp.topic}-{tp.partition}"
                 )
-
                 for message in messages:
+
                     insert_data(session, insert_stmt, message.value)
-
             consumer.commit()
-
         except Exception as e:
             logger.error(f"Consume error: {e}")
             time.sleep(3)
-
 
 if __name__ == "__main__":
     session = connect_cassandra()

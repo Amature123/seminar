@@ -12,7 +12,10 @@ from vnstock import Quote
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from vnstock import Trading
-vn_time = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-trading = Trading(symbol='VN30F1M',source='vci')
-board = trading.price_board(['ACB'])
-board.head()
+from vnstock import Quote
+import pandas as pd
+pd.set_option('display.max_rows', None)
+
+quote = Quote(symbol='BCM', source='VCI')
+data = quote.history(start='2025-12-26', end='2025-12-26',interval = '5m')
+print(data.tail(20))
