@@ -19,9 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOPIC = 'trading_data'
-BOOTSTRAP_SERVERS = ['kafka_broker:19092']
-
-
+BOOTSTRAP_SERVERS = ['kafka_broker:19092','kafka_broker_1:19092','kafka_broker_2:19092']
 def json_serializer(data):
     if isinstance(data, (np.integer, np.floating)):
         return data.item()
@@ -120,19 +118,16 @@ def produce_message(producer, record):
 
 def run_producer(symbols, sleep_time=60):
     producer = create_producer()
-    logger.info(f"Producing trading data for symbols: {symbols}")
-
     while True:
         try:
             for symbol in symbols:
+                logger.info(f"Producing trading data for symbols: {symbol}")
                 record = extract_trading_data(symbol)
                 produce_message(producer, record)
-                logger.info(f"Record to be sent: {record}")
-
+            logger.info(f"Record to be sent: {record}")
             producer.flush()
             logger.info("All messages sent.")
             time.sleep(sleep_time)
-
         except KeyboardInterrupt:
             logger.info("Producer stopped by user")
             break

@@ -5,7 +5,6 @@ from kafka import KafkaConsumer
 from cassandra.cluster import Cluster, NoHostAvailable
 from datetime import datetime
 
-from vnstock import Screener
 from zoneinfo import ZoneInfo
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -25,7 +24,7 @@ CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
 TOPIC = 'flink_computed_ohlc'
 GROUP_ID = 'ohvcl-consumer-group'
-SCREENER = ['5m', '15m', '30m', '1h']
+SCREENER = ['1m','5m', '15m', '30m', '1h']
 def connect_cassandra():
     while True:
         try:
@@ -44,9 +43,10 @@ def prepare_statements(session):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """)
 
-def screener_check(screener: str, message: dict):
-    return screener in SCREENER
-
+def safe_json_deserializer(x):
+    if x is None:
+        return None
+    return json.loads(x.decode("utf-8"))
 
 def transform_time(value):
     if isinstance(value, datetime):
@@ -79,7 +79,7 @@ def create_consumer():
         group_id=GROUP_ID,
         auto_offset_reset='earliest',
         enable_auto_commit=False,
-        value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+        value_deserializer=safe_json_deserializer,
         max_poll_records=100
     )
 

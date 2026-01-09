@@ -24,6 +24,10 @@ run_script_with_restart() {
         sleep 5
     done
 }
+# Start batch jobs
+echo "🚀 Starting batch jobs..."
+python3 /app/producer/OHVLC_screener.py &
+PID_BATCH=$!
 
 run_script_with_restart /app/processing/OHVLC_handler.py &
 PID_OHVLC=$!

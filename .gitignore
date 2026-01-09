@@ -7,3 +7,6 @@ logs
 .pylintrc
 __pycache__
 models
+checkpoints
+savepoints
+lightning_logs

@@ -4,7 +4,7 @@ import time
 from kafka import KafkaConsumer
 from cassandra.cluster import Cluster, NoHostAvailable
 from datetime import datetime
-
+import pandas as pd
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO

@@ -1,24 +1,29 @@
 import json
-import time
+import time as t
 import uuid
+import schedule
 import logging
 import numpy as np
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from kafka import KafkaProducer
 from vnstock import Quote, Screener, Trading
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
+from faker import Faker
+import random
+import numpy as np
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
-
+today = datetime.now(vietnamese_timezone)
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
+LAST_SESSION_DATA = {}
 
 TOPIC = 'ohvcl_data'
-BOOTSTRAP_SERVERS = ['kafka_broker:19092']
+BOOTSTRAP_SERVERS = ['kafka_broker:19092','kafka_broker_1:19092','kafka_broker_2:19092']
+fake = Faker()
 
 
 def json_serializer(data):
@@ -28,6 +33,14 @@ def json_serializer(data):
         return str(data)
     raise TypeError(f"Type {type(data)} not serializable")
 
+# def check_trading_hour(data_time):
+#     if data_time.time()<datetime.time(9,30):
+#         last_day=data_time-datetime.timedelta(days=1)
+#         data_time=datetime.datetime(last_day.year,last_day.month,last_day.day,16,0,0)
+        
+#     elif data_time.time()>datetime.time(16,0):
+#         data_time=datetime.datetime(data_time.year,data_time.month,data_time.day,16,0,0)
+#     return data_time
 
 def create_producer():
     return KafkaProducer(
@@ -42,11 +55,10 @@ def delivery_report(record_metadata):
         f"Message delivered to {record_metadata.topic} "
         f"[{record_metadata.partition}] at offset {record_metadata.offset}"
     )
-
-def extract_stock_data(symbol, start_date=None, end_date=None):
-    today = datetime.now(vietnamese_timezone).strftime("%Y-%m-%d")
-    start_date = start_date or today
-    end_date = end_date or today
+#----------------------Extract_data----------------------------#
+def extract_stock_data(symbol):
+    start_date =today.strftime("%Y-%m-%d")
+    end_date =today.strftime("%Y-%m-%d")
     screen = '1m'
     try:
         quote = Quote(symbol=symbol, source='vci')
@@ -55,7 +67,6 @@ def extract_stock_data(symbol, start_date=None, end_date=None):
             end=end_date,
             interval=screen
         )
-
         record = {
             "screener": screen,
             "symbol": symbol,
@@ -66,8 +77,6 @@ def extract_stock_data(symbol, start_date=None, end_date=None):
             "close": ohvlc["close"].iloc[-1],
             "volume": ohvlc["volume"].iloc[-1]
         }
-
-        # convert numpy types
         return {
             k: (v.item() if isinstance(v, np.generic) else v)
             for k, v in record.items()
@@ -76,6 +85,55 @@ def extract_stock_data(symbol, start_date=None, end_date=None):
     except Exception as e:
         logger.error(f"Error fetching data for {symbol}: {e}")
         return None
+
+def randomize_from_last_session(symbol, price_pct=0.01, vol_pct=0.2):
+    """
+    price_pct: biên độ giá ±1%
+    vol_pct: biên độ volume ±20%
+    """
+    base = LAST_SESSION_DATA.get(symbol)
+    if not base:
+        return None
+
+    close_price = base["close"]
+
+    def rand_price(p):
+        return round(p * random.uniform(1 - price_pct, 1 + price_pct), 2)
+
+    open_price = rand_price(close_price)
+    close_price_new = rand_price(open_price)
+    high_price = max(open_price, close_price_new) * random.uniform(1.0, 1.01)
+    low_price = min(open_price, close_price_new) * random.uniform(0.99, 1.0)
+
+    volume = int(base["volume"] * random.uniform(1 - vol_pct, 1 + vol_pct))
+
+    return {
+        "screener": "1m",
+        "symbol": symbol,
+        "time": datetime.now(vietnamese_timezone).strftime("%Y-%m-%d %H:%M:%S"),
+        "open": round(open_price, 2),
+        "high": round(high_price, 2),
+        "low": round(low_price, 2),
+        "close": round(close_price_new, 2),
+        "volume": volume
+    }
+
+
+def load_last_session_data(symbols):
+    global LAST_SESSION_DATA
+    logger.info("Loading last session OHLC data...")
+
+    for symbol in symbols:
+        data = extract_stock_data(symbol)
+        if data:
+            LAST_SESSION_DATA[symbol] = data
+            logger.info(f"Cached last session data for {symbol}")
+        else:
+            logger.warning(f"No data for {symbol}")
+
+
+
+#----------------------Producer----------------------------#
 
 def produce_message(producer, record):
     if not record:
@@ -90,29 +148,32 @@ def produce_message(producer, record):
         logger.error(f"Error producing message: {e}")
 
 
-def run_producer(symbols, sleep_time=30):
-    producer = create_producer()
-    logger.info(f"Producing messages for symbols: {symbols}")
-
-    while True:
-        try:
-            for symbol in symbols:
-                record = extract_stock_data(symbol)
-                produce_message(producer, record)
-                logger.info(f"Record to be sent: {record}")
-
-            producer.flush()
-            logger.info("All messages sent.")
-            time.sleep(sleep_time)
-
-        except KeyboardInterrupt:
-            logger.info("Producer stopped by user")
-            break
-        except Exception as e:
-            logger.error(f"Error in producer loop: {e}")
-            time.sleep(5)
+def kafka_producer_ohvlc(symbols,producer, realtime=True):
+    try:  
+        for symbol in symbols:
+            logger.info(f"Producing messages for symbols: {symbol}")
+            record = extract_stock_data(symbol) if realtime else randomize_from_last_session(symbol)
+            produce_message(producer, record)
+            logger.info(f"Record to be sent: {record}")
+        producer.flush()
+        logger.info("All messages sent.")
+    except KeyboardInterrupt:
+        logger.info("Producer stopped by user")
+    except Exception as e:
+        logger.error(f"Error in producer loop: {e}")
+        t.sleep(5)
 
 
 if __name__ == "__main__":
     logger.info("Starting Kafka OHVLC producer")
-    run_producer(SYMBOLS, sleep_time=30)
+    producer = create_producer()
+    #schedule
+    if today.time() < time(9,0,0) or (today.time() > time(11,30,0) and today.time() < time(13,0,0)) or today.time() > time(14,30,0):
+        load_last_session_data(SYMBOLS)
+        kafka_producer_ohvlc(SYMBOLS,producer,False)
+        schedule.every(1).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer,False)
+    else:
+        kafka_producer_ohvlc(SYMBOLS,producer)
+        schedule.every(30).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer)
+    while True:
+        schedule.run_pending()

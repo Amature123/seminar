@@ -2,13 +2,14 @@
 import logging
 import time
 import numpy as np
-from datetime import datetime
+from datetime import datetime,timedelta
 from cassandra.cluster import Cluster, NoHostAvailable
 from vnstock import Quote
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
 import pandas as pd
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
+
 
 #
 logging.basicConfig(
@@ -20,12 +21,13 @@ logger = logging.getLogger("ohlvc_batch_once")
 CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
 ROLLUP_RULES = {
+    "1m": "1min",
     "5m": "5min",
     "15m": "15min",
     "30m": "30min",
     "1H": "1h",
 }
-ROWS_PER_INTERVAL = 10
+ROWS_PER_INTERVAL = 300
 
 def connect_cassandra(cassandra_hosts, keyspace):
     while True:
@@ -38,10 +40,9 @@ def connect_cassandra(cassandra_hosts, keyspace):
             logger.warning("Cassandra not ready, retrying in 5s...")
             time.sleep(5)
 
-
 def prepare_statements(session):
     return session.prepare("""
-        INSERT INTO market.ohlvc(
+        INSERT INTO market.ohlvc_old(
             screener,
             symbol,
             time,
@@ -53,14 +54,16 @@ def prepare_statements(session):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """)
 
-def fetch_1m(symbol, minutes=300):
-    today = datetime.now(vietnamese_timezone).strftime("%Y-%m-%d")
-
+def fetch_1m(symbol):
+    end_dt = datetime.now(vietnamese_timezone)
+    start_dt = end_dt - timedelta(days=1)
+    start = start_dt.strftime("%Y-%m-%d")
+    end = end_dt.strftime("%Y-%m-%d")
     try:
         quote = Quote(symbol=symbol, source="vci")
         df = quote.history(
-            start=today,
-            end=today,
+            start=start,
+            end=end,
             interval="1m"
         )
 
@@ -68,7 +71,7 @@ def fetch_1m(symbol, minutes=300):
             return None
 
         df["time"] = pd.to_datetime(df["time"])
-        return df.tail(minutes)
+        return df
 
     except Exception as e:
         logger.error(f"Fetch 1m failed {symbol}: {e}")

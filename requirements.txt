@@ -6,8 +6,10 @@ jsonschema
 kafka-python
 tenacity
 cassandra-driver
-# apache-flink==2.0.0
 vnstock
-bokeh
 streamlit
 lightweight-charts
+pandas-ta
+schedule
+transformers
+newsapi-python

@@ -1,7 +1,5 @@
-DROP TABLE IF EXISTS ohlc_source;
-DROP TABLE IF EXISTS ohlc_kafka_sink;
 
-CREATE TABLE ohlc_source (
+CREATE OR REPLACE TABLE ohlc_source (
   screener STRING,
   symbol STRING,
   `open` DOUBLE,
@@ -11,7 +9,7 @@ CREATE TABLE ohlc_source (
   `volume` DOUBLE,
   `time` TIMESTAMP(3),
   `topic_partition` INT METADATA FROM 'partition',
-  WATERMARK FOR `time` AS `time` - INTERVAL '5' SECONDS  
+  WATERMARK FOR `time` AS `time` - INTERVAL '10' SECONDS  
 ) WITH (
   'connector' = 'kafka',
   'topic' = 'ohvcl_data',
@@ -23,7 +21,7 @@ CREATE TABLE ohlc_source (
 );
 
 
-CREATE TABLE ohlc_kafka_sink (
+CREATE OR REPLACE TABLE ohlc_kafka_sink (
   screener STRING,
   symbol STRING,
   `time` TIMESTAMP(3),
@@ -39,38 +37,9 @@ CREATE TABLE ohlc_kafka_sink (
   'properties.bootstrap.servers' = 'kafka_broker:19092,kafka_broker_1:19092,kafka_broker_2:19092',
   'key.format' = 'json',
   'value.format' = 'json',
-  'sink.delivery-guarantee' = 'exactly-once',
   'sink.transactional-id-prefix' = 'flink_ohlc',
   'properties.transaction.timeout.ms' = '600000'
 );
-
--- CREATE TABLE print_source (
---   screener STRING,
---   symbol STRING,
---   `open` DOUBLE,
---   `high` DOUBLE,
---   `low` DOUBLE,
---   `close` DOUBLE,
---   `volume` DOUBLE,
---   `time` STRING
--- ) WITH (
---   'connector' = 'print'
--- );
-
--- INSERT INTO print_source
--- SELECT screener, symbol, `open`, `high`, `low`, `close`, `volume`, `time`
--- FROM ohlc_source;
-
--- SELECT  symbol,
---         topic_partition,
---         `time`,
---         window_start,
---         window_end
--- FROM TABLE(
---             TUMBLE(TABLE ohlc_source,
---                     DESCRIPTOR(`time`),
---                     INTERVAL '2' MINUTE)
---             );
 
 
 INSERT INTO ohlc_kafka_sink
