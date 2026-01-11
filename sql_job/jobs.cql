@@ -38,21 +38,7 @@ CREATE TABLE IF NOT EXISTS market.ohlvc (
     close double,
     volume double,
     PRIMARY KEY ((screener, symbol), time)
-)
-WITH CLUSTERING ORDER BY (time DESC);
-
-CREATE TABLE IF NOT EXISTS market.ohlvc_old (
-    screener text,
-    symbol text,
-    time timestamp,
-    open double,
-    high double,
-    low double,
-    close double,
-    volume double,
-    PRIMARY KEY ((screener, symbol), time)
 );
-
 
 CREATE TABLE IF NOT EXISTS market.news (
     symbol text,

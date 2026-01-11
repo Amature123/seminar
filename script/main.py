@@ -39,10 +39,10 @@ def get_db():
     finally:
         session.shutdown()
 
-def get_old_ohlvc (session, symbol: str, interval: str = "1m") -> pd.DataFrame:
+def get_ohlvc(session, symbol, interval= "1m") -> pd.DataFrame:
     query = """
-        SELECT screener, symbol, time, open, high, low, close, volume
-        FROM ohlvc_old
+        SELECT time, open, high, low, close, volume
+        FROM ohlvc
         WHERE symbol = %s AND screener = %s
         ALLOW FILTERING
     """
@@ -53,25 +53,28 @@ def get_old_ohlvc (session, symbol: str, interval: str = "1m") -> pd.DataFrame:
     df = pd.DataFrame(rows)
     if df.empty:
         return df
-
     df["time"] = pd.to_datetime(df["time"])
     return df
-def get_latest_a_symbols(session, symbol, interval: str = "1m", limit_per_symbol: int = 1) -> pd.DataFrame:
+
+def call_1_tick(session, symbol, interval= "1m") -> pd.DataFrame:
     query = """
-        SELECT symbol, time, open, high, low, close, volume
+        SELECT time, open, high, low, close, volume
         FROM ohlvc
-            WHERE symbol = %s AND screener = %s
-            LIMIT %s
-            ALLOW FILTERING
-        """
-    rows = session.execute(query, (symbol,interval,limit_per_symbol))
+        WHERE symbol = %s AND screener = %s
+        LIMIT 1
+        ALLOW FILTERING
+    """
+    rows = session.execute(
+        query,
+        (symbol, interval)
+    )
     df = pd.DataFrame(rows)
     if df.empty:
         return df
     df["time"] = pd.to_datetime(df["time"])
     return df
 
-def get_latest_trading_all_symbols(session,symbols,limit_per_symbol: int = 1):
+def get_latest_trading_all_symbols(session,symbols,limit_per_symbol= 1):
     results = []
     for symbol in symbols:
         query = """
@@ -106,6 +109,7 @@ def get_latest_trading_all_symbols(session,symbols,limit_per_symbol: int = 1):
         rows = session.execute(query, (symbol, limit_per_symbol,))
         results.extend(rows)
     return results
+
 def stocks_to_str(stocks):
     return ",".join(stocks)
 
@@ -147,11 +151,14 @@ def update_state():
     symbol = st.session_state.selected_symbol
     state_key = f"ohlvc_df_{symbol}"
     state_key_2 = f"ohlvc_udpate_{symbol}"
-    st.session_state[state_key] = get_old_ohlvc(session, symbol)
-    st.session_state[state_key_2] = get_latest_a_symbols(session, symbol)
+    st.session_state[state_key] = get_ohlvc(session, symbol)
+    st.session_state[state_key_2] = call_1_tick(session, symbol)
 
+@st.fragment(run_every="200ms")
+def update_tick(chart,df):
+    for i, series in df.iterrows():
+        chart.update(series)
 update_state()
-
 df = st.session_state.get(f"ohlvc_df_{option}", pd.DataFrame())
 df_update = st.session_state.get(f"ohlvc_udpate_{option}",pd.DataFrame())
 
@@ -168,16 +175,13 @@ else:
     ema_data = calculate_ema(df, period=50)
     sma_line.set(sma_data)
     ema_line.set(ema_data)
-    for i, series in df_update.iterrows():
-        chart.update(series)
-        time.sleep(0.1)
     chart.load()
+    update_tick(chart,df_update)
 
 trading_data = get_latest_trading_all_symbols(session, SYMBOLS, limit_per_symbol=1)
 trading_df = pd.DataFrame(trading_data)
 st.subheader("Latest trading data")
 st.dataframe(trading_df)
-
 
 
 # if "tickers_input" not in st.session_state:

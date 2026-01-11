@@ -87,10 +87,6 @@ def extract_stock_data(symbol):
         return None
 
 def randomize_from_last_session(symbol, price_pct=0.01, vol_pct=0.2):
-    """
-    price_pct: biên độ giá ±1%
-    vol_pct: biên độ volume ±20%
-    """
     base = LAST_SESSION_DATA.get(symbol)
     if not base:
         return None

@@ -66,7 +66,7 @@ def insert_data(session, insert_stmt, record: dict):
             record['volume']
         ))
         logger.info(
-            f"Inserted OHVLC {record['symbol']} @ {record['time']}"
+            f"Inserted OHVLC {record['symbol']} @ {record['time']} @ {record['screener']}"
         )
     except Exception as e:
         logger.error(f"Cassandra insert error: {e}")
@@ -99,7 +99,12 @@ def consume_data(session, insert_stmt, wait=5):
                     f"from {tp.topic}-{tp.partition}"
                 )
                 for message in messages:
-
+                    if message.value is None:
+                        logger.info(
+                            f"Skip tombstone message "
+                            f"key={message.key}"
+                        )
+                        continue
                     insert_data(session, insert_stmt, message.value)
             consumer.commit()
         except Exception as e:

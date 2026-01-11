@@ -42,7 +42,7 @@ def connect_cassandra(cassandra_hosts, keyspace):
 
 def prepare_statements(session):
     return session.prepare("""
-        INSERT INTO market.ohlvc_old(
+        INSERT INTO market.ohlvc(
             screener,
             symbol,
             time,
@@ -98,6 +98,27 @@ def rollup(df_1m, rule):
 
     return rolled
 
+def mock_check(df,session,symbol):
+    """
+    Docstring for mock_check
+    Check at first so if it has, no need to batchs data again
+    :param df: Description
+    """
+    query = """
+        SELECT time, open, high, low, close, volume
+        FROM ohlvc
+        WHERE symbol = %s AND screener = '1m'
+        LIMIT 1
+        ALLOW FILTERING
+    """
+    row = session.execute(
+        query,
+        (symbol,)
+    ).one()
+    latest_time = row.time if row else None
+    if latest_time is None: 
+        return df 
+    return df[df["time"] > latest_time]
 
 def insert_batch(session, stmt, screener, symbol, df):
     for _, row in df.iterrows():
@@ -129,7 +150,9 @@ def run_once(symbols):
     for symbol in symbols:
         df_1m = fetch_1m(symbol)
 
+        df_1m = mock_check(df_1m,session,symbol)
         if df_1m is None or df_1m.empty:
+            logger.info(f"No find new on static data for {symbol}, Skipping...")
             continue
 
         for screener, rule in ROLLUP_RULES.items():

@@ -44,15 +44,22 @@ CREATE OR REPLACE TABLE ohlc_kafka_sink (
 
 INSERT INTO ohlc_kafka_sink
 SELECT
-  screener ,
-  symbol ,
-  `time` ,
-  `open` ,
-  `high` ,
-  `low` ,
-  `close` ,
-  `volume` 
-FROM ohlc_source
+  '1m' AS screener,
+  symbol,
+  window_start AS `time`,
+  FIRST_VALUE(`open`) AS `open`,
+  MAX(`high`) AS `high`,
+  MIN(`low`) AS `low`,
+  LAST_VALUE(`close`) AS `close`,
+  SUM(`volume`) AS `volume`
+FROM TABLE(
+  TUMBLE(
+    TABLE ohlc_source,
+    DESCRIPTOR(`time`),
+    INTERVAL '1' MINUTE
+  )
+)
+GROUP BY symbol, window_start
 
 UNION ALL
 
