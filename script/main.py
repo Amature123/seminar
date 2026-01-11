@@ -8,7 +8,7 @@ from typing import Optional, List
 import pandas as pd
 from zoneinfo import ZoneInfo
 import streamlit as st
-from lightweight_charts.widgets import StreamlitChart
+from lightweight_charts.widgets import StreamlitChart,AbstractChart
 from utils import SYMBOLS
 import pandas_ta as ta
 vn_zone = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -131,13 +131,10 @@ st.set_page_config(
     page_icon=":chart_with_upwards_trend:",
     layout="wide",
 )
-
-"""
+st.markdown("""
 # :material/query_stats: Stock peer analysis
-
 Easily compare stocks against others in their peer group.
-"""
-""
+""")
 
 option = st.selectbox(
     "Please select a symbol",
@@ -146,75 +143,63 @@ option = st.selectbox(
 )
 session = get_cassandra_session()
 
-@st.fragment(run_every="500ms")
-def update_state():
-    symbol = st.session_state.selected_symbol
-    state_key = f"ohlvc_df_{symbol}"
-    state_key_2 = f"ohlvc_udpate_{symbol}"
-    st.session_state[state_key] = get_ohlvc(session, symbol)
-    st.session_state[state_key_2] = call_1_tick(session, symbol)
-
 @st.fragment(run_every="200ms")
-def update_tick(chart,df):
-    for i, series in df.iterrows():
-        chart.update(series)
-update_state()
-df = st.session_state.get(f"ohlvc_df_{option}", pd.DataFrame())
-df_update = st.session_state.get(f"ohlvc_udpate_{option}",pd.DataFrame())
+def realtime_tick():
+    symbol = st.session_state.selected_symbol
+    df_key = f"ohlvc_df_{symbol}"
 
+    tick_df = call_1_tick(session, symbol)
+    if tick_df.empty:
+        return
+    df = st.session_state[df_key]
+    df = pd.concat([df, tick_df])
+    df = df.drop_duplicates(subset="time", keep="last")
+    df = df.sort_values("time")
+
+    st.session_state[df_key] = df
+    chart = st.session_state.chart
+    chart.update(tick_df.iloc[-1])
+
+    st.session_state.sma_line.set(calculate_sma(df, 50))
+    st.session_state.ema_line.set(calculate_ema(df, 50))
+
+df_key = f"ohlvc_df_{option}"
+if df_key not in st.session_state:
+    with st.spinner("Loading OHLCV history..."):
+        df = get_ohlvc(session, option)
+        df = df.sort_values("time")
+        st.session_state[df_key] = df
+
+if "chart" not in st.session_state:
+    df = st.session_state[df_key]
+
+    chart = StreamlitChart(width=900, height=600)
+    chart.set(df,keep_drawings=True)
+
+    sma_line = chart.create_line("SMA 50")
+    ema_line = chart.create_line("EMA 50")
+
+    sma_line.set(calculate_sma(df, 50))
+    ema_line.set(calculate_ema(df, 50))
+
+    chart.load()
+
+    st.session_state.chart = chart
+    st.session_state.sma_line = sma_line
+    st.session_state.ema_line = ema_line
+    realtime_tick()
 st.subheader(f"{option} price chart")
 
-if df.empty:
-    st.warning("No data")
-else:
-    chart = StreamlitChart(width=900, height=600)
-    chart.set(df)
-    sma_line = chart.create_line('SMA 50')
-    sma_data = calculate_sma(df, period=50)
-    ema_line = chart.create_line('EMA 50')
-    ema_data = calculate_ema(df, period=50)
-    sma_line.set(sma_data)
-    ema_line.set(ema_data)
-    chart.load()
-    update_tick(chart,df_update)
 
-trading_data = get_latest_trading_all_symbols(session, SYMBOLS, limit_per_symbol=1)
-trading_df = pd.DataFrame(trading_data)
+
+
 st.subheader("Latest trading data")
-st.dataframe(trading_df)
 
+trading_data = get_latest_trading_all_symbols(
+    session,
+    SYMBOLS,
+    limit_per_symbol=1
+)
 
-# if "tickers_input" not in st.session_state:
-#     st.session_state.tickers_input = st.query_params.get(
-#         "stocks", stocks_to_str(DEFAULT_STOCKS)
-#     ).split(",")
-
-# def update_query_param():
-#     if st.session_state.tickers_input:
-#         st.query_params["stocks"] = stocks_to_str(st.session_state.tickers_input)
-#     else:
-#         st.query_params.pop("stocks", None)
-
-# ##Left panel: stock selector
-# top_left_cell = cols[0].container(
-#     border=True, height="stretch", vertical_alignment="center"
-# )
-# with top_left_cell:
-#     tickers = st.multiselect(
-#         "Stock tickers",
-#         options=sorted(set(SYMBOLS) | set(st.session_state.tickers_input)),
-#         default=st.session_state.tickers_input,
-#         placeholder="Choose stocks to compare. Example: NVDA",
-#         accept_new_options=True,
-#     )
-
-# tickers = [t.upper() for t in tickers]
-
-# if tickers:
-#     st.query_params["stocks"] = stocks_to_str(tickers)
-# else:
-#     st.query_params.pop("stocks", None)
-# if not tickers:
-#     top_left_cell.info("Pick some stocks to compare", icon=":material/info:")
-#     st.stop()
-##right panel: OHVLC chart
+trading_df = pd.DataFrame(trading_data)
+st.dataframe(trading_df, use_container_width=True)

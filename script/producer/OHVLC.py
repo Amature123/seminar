@@ -33,14 +33,14 @@ def json_serializer(data):
         return str(data)
     raise TypeError(f"Type {type(data)} not serializable")
 
-# def check_trading_hour(data_time):
-#     if data_time.time()<datetime.time(9,30):
-#         last_day=data_time-datetime.timedelta(days=1)
-#         data_time=datetime.datetime(last_day.year,last_day.month,last_day.day,16,0,0)
+def check_trading_hour(data_time):
+    if data_time.time()<datetime.time(9,30):
+        last_day=data_time-datetime.timedelta(days=1)
+        data_time=datetime.datetime(last_day.year,last_day.month,last_day.day,16,0,0)
         
-#     elif data_time.time()>datetime.time(16,0):
-#         data_time=datetime.datetime(data_time.year,data_time.month,data_time.day,16,0,0)
-#     return data_time
+    elif data_time.time()>datetime.time(16,0):
+        data_time=datetime.datetime(data_time.year,data_time.month,data_time.day,16,0,0)
+    return data_time
 
 def create_producer():
     return KafkaProducer(

@@ -54,9 +54,9 @@ def prepare_statements(session):
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """)
 
-def fetch_1m(symbol):
+def fetch_1m(symbol,day_minus_xtract):
     end_dt = datetime.now(vietnamese_timezone)
-    start_dt = end_dt - timedelta(days=1)
+    start_dt = end_dt - timedelta(days=day_minus_xtract)
     start = start_dt.strftime("%Y-%m-%d")
     end = end_dt.strftime("%Y-%m-%d")
     try:
@@ -148,7 +148,7 @@ def run_once(symbols):
     logger.info("Start OHVLC rollup batch (1m → multi timeframe)")
 
     for symbol in symbols:
-        df_1m = fetch_1m(symbol)
+        df_1m = fetch_1m(symbol,0.5)
 
         df_1m = mock_check(df_1m,session,symbol)
         if df_1m is None or df_1m.empty:
