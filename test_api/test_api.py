@@ -24,7 +24,7 @@
 import requests
 import json
 def my_custom_function():
-    url = "https://api.worldnewsapi.com/search-news?text=thị+trường+chứng+khoán&number=100&earliest-publish-date=2026-01-01&source-country=vn"
+    url = "https://api.worldnewsapi.com/search-news?text=thi+truong+chung+khoan+ACB&number=100&earliest-publish-date=2026-01-01&source-country=vn"
     api_key = "dcecd661ab884632936c9e49047eebba"
     headers = {
         'x-api-key': api_key

@@ -86,22 +86,18 @@ def extract_stock_data(symbol):
         logger.error(f"Error fetching data for {symbol}: {e}")
         return None
 
-def randomize_from_last_session(symbol, price_pct=0.01, vol_pct=0.2):
+def randomize_from_last_session(symbol, price_pct=0.005, vol_pct=0.2):
+    global LAST_SESSION_DATA
     base = LAST_SESSION_DATA.get(symbol)
     if not base:
         return None
-
     close_price = base["close"]
-
-    def rand_price(p):
-        return round(p * random.uniform(1 - price_pct, 1 + price_pct), 2)
-
-    open_price = rand_price(close_price)
-    close_price_new = rand_price(open_price)
-    high_price = max(open_price, close_price_new) * random.uniform(1.0, 1.01)
-    low_price = min(open_price, close_price_new) * random.uniform(0.99, 1.0)
-
+    open_price = close_price
+    close_price_new = close_price * random.uniform(1 - price_pct, 1 + price_pct) 
+    high_price = max(open_price, close_price_new) * random.uniform(1.0, 1 + price_pct)
+    low_price = min(open_price, close_price_new) * random.uniform(1 - price_pct, 1.0)
     volume = int(base["volume"] * random.uniform(1 - vol_pct, 1 + vol_pct))
+    LAST_SESSION_DATA[symbol]['close'] = close_price_new
 
     return {
         "screener": "1m",
@@ -118,7 +114,6 @@ def randomize_from_last_session(symbol, price_pct=0.01, vol_pct=0.2):
 def load_last_session_data(symbols):
     global LAST_SESSION_DATA
     logger.info("Loading last session OHLC data...")
-
     for symbol in symbols:
         data = extract_stock_data(symbol)
         if data:
@@ -126,7 +121,6 @@ def load_last_session_data(symbols):
             logger.info(f"Cached last session data for {symbol}")
         else:
             logger.warning(f"No data for {symbol}")
-
 
 
 #----------------------Producer----------------------------#
@@ -167,7 +161,7 @@ if __name__ == "__main__":
     if today.time() < time(9,0,0) or (today.time() > time(11,30,0) and today.time() < time(13,0,0)) or today.time() > time(14,30,0):
         load_last_session_data(SYMBOLS)
         kafka_producer_ohvlc(SYMBOLS,producer,False)
-        schedule.every(1).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer,False)
+        schedule.every(2).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer,False)
     else:
         kafka_producer_ohvlc(SYMBOLS,producer)
         schedule.every(30).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer)

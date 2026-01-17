@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS market.ohlvc (
     close double,
     volume double,
     PRIMARY KEY ((screener, symbol), time)
-);
+)WITH CLUSTERING ORDER BY (time DESC);
 
 CREATE TABLE IF NOT EXISTS market.news (
     symbol text,
@@ -49,6 +49,17 @@ CREATE TABLE IF NOT EXISTS market.news (
     s_content text,
     close double,
     price_change_pct double,
+    label text,
+    sentiment_score double,
     PRIMARY KEY (symbol, id)
 );
 
+CREATE TABLE IF NOT EXISTS market.prediction(
+    symbol text,
+    time timestamp,
+    time_step int,
+    close_predict double,
+    model text,
+    created_at timestamp,
+    PRIMARY KEY ((symbol), time, time_step)
+)WITH CLUSTERING ORDER BY (time DESC);

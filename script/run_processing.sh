@@ -24,16 +24,19 @@ run_script_with_restart() {
         sleep 5
     done
 }
-# Start batch jobs
-echo "🚀 Starting batch jobs..."
-python3 /app/producer/OHVLC_screener.py &
-PID_BATCH=$!
+
 
 run_script_with_restart /app/processing/OHVLC_handler.py &
 PID_OHVLC=$!
 
 run_script_with_restart /app/processing/trading_handler.py &
 PID_TRADING=$!
+
+run_script_with_restart /app/processing/news_handler.py &
+PID_NEWS=$!
+
+run_script_with_restart /app/processing/model_handler.py &
+PID_NEWS=$!
 
 trap "echo 'Stopping...'; kill $PID_OHVLC $PID_NEWS" SIGTERM SIGINT
 

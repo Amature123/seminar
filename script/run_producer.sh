@@ -44,10 +44,15 @@ echo -e "${GREEN}✓ Kafka ready!${NC}"
 # Start producers
 run_script_with_restart /app/producer/OHVLC.py &
 PID_OHVLC=$!
+
 run_script_with_restart /app/producer/ticks_news.py &
 PID_NEWS=$!
+###On maintaining
 run_script_with_restart /app/producer/trading.py &
 PID_TRAD=$!
 
-trap "echo 'Stopping...'; kill $PID_OHVLC $PID_NEWS $PID_NEWS PID_BATCH" SIGTERM SIGINT
+run_script_with_restart /app/producer/model_producer.py &
+PID_MODEL=$!
+
+trap "echo 'Stopping...'; kill $PID_OHVLC $PID_NEWS $PID_MODEL " SIGTERM SIGINT
 wait

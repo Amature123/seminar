@@ -219,7 +219,20 @@ services:
         condition: service_healthy
       cassandra:
         condition: service_healthy
+    networks:
+      - seminar_project
 
+  batch_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: batch_app
+    volumes:
+      - ./script/:/app
+    entrypoint: ["bash", "-c", "cd /app && chmod +x run_batch.sh && ./run_batch.sh"]
+    depends_on:
+      cassandra:
+        condition: service_healthy
     networks:
       - seminar_project
 

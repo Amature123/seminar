@@ -4,6 +4,7 @@ import time
 from kafka import KafkaConsumer
 from cassandra.cluster import Cluster, NoHostAvailable
 from datetime import datetime
+from utils import transform_time
 import pandas as pd
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -22,17 +23,28 @@ KEYSPACE = 'market'
 TOPIC = 'trading_data'
 GROUP_ID = 'trading-consumer-group'
 
-
-def connect_cassandra():
-    while True:
+def connect_cassandra(max_retries=10, delay=5):
+    retries = 0
+    while retries < max_retries:
+        cluster = None
         try:
             cluster = Cluster(CASSANDRA_HOSTS)
             session = cluster.connect(KEYSPACE)
             logger.info("Connected to Cassandra")
             return session
-        except NoHostAvailable:
-            logger.warning("Cassandra not ready, retrying in 5s...")
-            time.sleep(5)
+        except NoHostAvailable as e:
+            retries += 1
+            logger.warning(
+                f"Cassandra not ready (attempt {retries}/{max_retries}), retrying in {delay}s..."
+            )
+            time.sleep(delay)
+        except Exception as e:
+            logger.exception("Unexpected Cassandra error")
+            raise
+        finally:
+            if cluster and retries >= max_retries:
+                cluster.shutdown()
+
 
 
 def prepare_statements(session):
@@ -66,11 +78,6 @@ def prepare_statements(session):
         )
     """)
 
-
-def transform_time(value):
-    if isinstance(value, datetime):
-        return value
-    return datetime.fromisoformat(value)
 
 
 def insert_data(session, insert_stmt, record: dict):
@@ -127,7 +134,6 @@ def create_consumer():
         value_deserializer=lambda x: json.loads(x.decode('utf-8')),
         max_poll_records=100
     )
-
 
 def consume_data(session, insert_stmt, wait=5):
     consumer = create_consumer()

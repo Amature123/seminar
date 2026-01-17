@@ -13,3 +13,4 @@ pandas-ta
 schedule
 transformers
 newsapi-python
+pytorch-forecasting
