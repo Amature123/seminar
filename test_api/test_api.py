@@ -21,6 +21,7 @@
 # from zoneinfo import ZoneInfo
 # vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 # today = datetime.now(vietnamese_timezone)
+<<<<<<< HEAD
 import requests
 import json
 def my_custom_function():
@@ -30,19 +31,14 @@ def my_custom_function():
         'x-api-key': api_key
     }
     response = requests.get(url, headers=headers)
+=======
+from vnstock import Listing, Company
+import pandas as pd
+import re
+import random
+company_list = Listing(source='vci')
+cp_list = company_list.symbols_by_group('VN30')
+SYMBOLS =random.sample(list(cp_list), 18)
+>>>>>>> 1eca910 (add backend)
 
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return f"Error: {response.status_code}"
-
-if __name__ == "__main__":
-    data = my_custom_function()
-
-    if data:
-        with open("vietnam_stock_news.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-        print("✅ Đã lưu file vietnam_stock_news.json")
-    else:
-        print("❌ Lỗi khi gọi API")
+print(SYMBOLS)

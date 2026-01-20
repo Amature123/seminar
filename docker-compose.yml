@@ -191,7 +191,7 @@ services:
       dockerfile: Dockerfile
     container_name: producer_app
     volumes:
-      - ./script/:/app
+      - ./backend:/app
     entrypoint: ["bash", "-c", "cd /app && chmod +x run_producer.sh && ./run_producer.sh"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
@@ -209,7 +209,7 @@ services:
       dockerfile: Dockerfile
     container_name: processing_app
     volumes:
-      - ./script/:/app
+      - ./backend:/app
     entrypoint: ["bash", "-c", "cd /app && chmod +x run_processing.sh && ./run_processing.sh"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka_broker:19092
@@ -228,7 +228,11 @@ services:
       dockerfile: Dockerfile
     container_name: batch_app
     volumes:
+<<<<<<< HEAD
       - ./script/:/app
+=======
+      - ./backend:/app
+>>>>>>> 1eca910 (add backend)
     entrypoint: ["bash", "-c", "cd /app && chmod +x run_batch.sh && ./run_batch.sh"]
     depends_on:
       cassandra:
@@ -266,14 +270,30 @@ services:
     command: /bin/bash -c "sleep 8 && echo loading cassandra keyspace && cqlsh cassandra -f /jobs.cql"
     networks:
       - seminar_project
-    
-  backend:
+  
+
+  back_end:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["streamlit", "run", "/app/main.py","--server.port=8501"]
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes: 
-      - ./script/:/app
+      - ./backend/:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    networks:
+      - seminar_project
+
+  front_end:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["streamlit", "run", "/front_end/main.py","--server.port=8501","--reload"]
+    volumes: 
+      - ./fronend/:/app
     ports:
       - "8501:8501"
     depends_on:

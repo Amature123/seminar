@@ -5,12 +5,24 @@ faker
 jsonschema
 kafka-python
 tenacity
+vnai==2.2.6
+vnstock==3.3.1
+vnstock_ezchart==0.0.3
 cassandra-driver
-vnstock
 streamlit
 lightweight-charts
 pandas-ta
 schedule
+<<<<<<< HEAD
 transformers
 newsapi-python
 pytorch-forecasting
+=======
+pytorch-forecasting
+fastapi
+uvicorn
+pydantic
+fastapi-cache2
+cachetools
+httpx
+>>>>>>> 1eca910 (add backend)
