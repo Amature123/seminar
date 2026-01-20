@@ -77,19 +77,11 @@ def prediction_data(data,model,symbol):
                         )
         pred = raw_prediction.output.prediction[0, :, 1] ##0.5
         pred_list =  pred.detach().cpu().numpy().tolist()
-<<<<<<< HEAD:script/producer/model_producer.py
-        pred_mean_per_10min = np.mean(pred_list)
-        return  {
-                "symbol": symbol,
-                "base_time": data['time'].iloc[-1].isoformat(),
-                "mean_predictions":pred_mean_per_10min,
-=======
 
         return  {
                 "symbol": symbol,
                 "base_time": data['time'].iloc[-1].isoformat() - pd.Timedelta(minutes=10),
                 "predictions": pred_list,
->>>>>>> 1eca910 (add backend):backend/producer/model_producer.py
                 "model": "TFT_v3.6",
                 "created_at": datetime.now(vietnamese_timezone).isoformat()
             }

@@ -33,7 +33,6 @@ def get_cassandra_session():
         return session
     except NoHostAvailable as e:
         logger.error(f"Cassandra connection error: {e}")
-        raise HTTPException(status_code=500, detail="Cassandra not available")
 
 def get_ohlvc(session, symbol, interval= "1m") -> pd.DataFrame:
     query = """

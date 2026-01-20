@@ -19,11 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ohlvc_batch_once")
 
-<<<<<<< HEAD:script/static_insert/OHVLC_screener.py
-=======
 logger.info(f"Symbols count:{len(SYMBOLS)}")
 
->>>>>>> 1eca910 (add backend):backend/static_insert/OHVLC_screener.py
 CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
 ROLLUP_RULES = {
@@ -34,10 +31,6 @@ ROLLUP_RULES = {
     "1H": "1h",
 }
 ROWS_PER_INTERVAL = 300
-<<<<<<< HEAD:script/static_insert/OHVLC_screener.py
-=======
-SYMBOLS = ['MBB', 'PLX', 'MSN', 'VRE', 'HPG', 'VPB', 'SHB', 'VJC', 'TPB', 'VIB', 'SAB', 'CTG', 'MWG', 'HDB', 'BID', 'DGC', 'GVR', 'SSI']
->>>>>>> 1eca910 (add backend):backend/static_insert/OHVLC_screener.py
 
 def connect_cassandra(cassandra_hosts, keyspace):
     while True:

@@ -121,11 +121,6 @@ def load_last_session_data(symbols):
             logger.info(f"Cached last session data for {symbol}")
         else:
             logger.warning(f"No data for {symbol}")
-<<<<<<< HEAD:script/producer/OHVLC.py
-
-
-=======
->>>>>>> 1eca910 (add backend):backend/producer/OHVLC.py
 #----------------------Producer----------------------------#
 def produce_message(producer, record):
     if not record:
@@ -172,11 +167,5 @@ if __name__ == "__main__":
         load_last_session_data(SYMBOLS)
         kafka_producer_ohvlc(SYMBOLS,producer,False)
         schedule.every(2).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer,False)
-<<<<<<< HEAD:script/producer/OHVLC.py
-    else:
-        kafka_producer_ohvlc(SYMBOLS,producer)
-        schedule.every(30).seconds.do(kafka_producer_ohvlc,SYMBOLS,producer)
-=======
->>>>>>> 1eca910 (add backend):backend/producer/OHVLC.py
     while True:
         schedule.run_pending()

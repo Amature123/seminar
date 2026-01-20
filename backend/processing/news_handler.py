@@ -27,11 +27,7 @@ BOOTSTRAP_SERVERS = [
 CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
 
-<<<<<<< HEAD:script/processing/news_handler.py
-TOPIC = 'flink_computed_news'
-=======
 TOPIC = 'ticks_symbol'
->>>>>>> 1eca910 (add backend):backend/processing/news_handler.py
 GROUP_ID = 'news-consumer-group'
 
 def connect_cassandra():
@@ -55,15 +51,8 @@ def prepare_statements(session):
             public_date,
             s_content,
             close,
-<<<<<<< HEAD:script/processing/news_handler.py
-            price_change_pct,
-            label ,
-            sentiment_score 
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-=======
             price_change_pct
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
->>>>>>> 1eca910 (add backend):backend/processing/news_handler.py
     """)
 
 
@@ -79,15 +68,6 @@ def transform_time(value):
             return datetime.fromtimestamp(value, tz=vietnamese_timezone)
     return datetime.fromisoformat(value)
 
-<<<<<<< HEAD:script/processing/news_handler.py
-def sentiment_score(sentence):
-    score = sentiment_task(sentence)
-    return score[0]
-
-def insert_data(session, insert_stmt, record: dict):
-    try:
-        sentiment = sentiment_score(record.get("s_content"))
-=======
 def sentiment_score(sentence: str):
     if sentence is None:
         return None
@@ -100,29 +80,17 @@ def sentiment_score(sentence: str):
 
 def insert_data(session, insert_stmt, record: dict):
     try:
->>>>>>> 1eca910 (add backend):backend/processing/news_handler.py
         session.execute(
             insert_stmt,
             (
                 record["symbol"],
                 record["id"],
-<<<<<<< HEAD:script/processing/news_handler.py
-                record.get("title"),
-                record.get("link"),
-                transform_time(record.get("public_date")),
-                record.get("s_content"),
-                record.get("close"),
-                record.get("price_change_pct"),
-                sentiment[0]['label'],
-                sentiment[0]['score']
-=======
                 record("title"),
                 record("link"),
                 transform_time(record.get("public_date")),
                 record("s_content"),
                 record("close"),
                 record("price_change_pct")
->>>>>>> 1eca910 (add backend):backend/processing/news_handler.py
             )
         )
 

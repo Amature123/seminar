@@ -66,10 +66,6 @@ def insert_data(session, insert_stmt, record: dict):
         base_time = transform_time(record["base_time"])
         created_at = transform_time(record["created_at"])
         model = record["model"]
-<<<<<<< HEAD:script/processing/model_handler.py
-        mean
-=======
->>>>>>> 1eca910 (add backend):backend/processing/model_handler.py
         for step, value in enumerate(record["predictions"], start=1):
             session.execute(
                 insert_stmt,
