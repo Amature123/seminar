@@ -11,7 +11,7 @@ import pandas as pd
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 
 end_dt = datetime.now(vietnamese_timezone)
-start_dt = end_dt - timedelta(days=0.5)
+start_dt = end_dt - timedelta(days=0)
 #
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",

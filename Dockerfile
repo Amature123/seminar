@@ -11,8 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --upgrade pip setuptools wheel
-COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+COPY requirements.txt /app/requirements.txt
+RUN pip3 install -r requirements.txt
+
+COPY requirements_new.txt /app/requirements_new.txt
+RUN pip3 install -r requirements_new.txt
+
+COPY . . 
 
 EXPOSE 8000 8501
 

@@ -8,6 +8,12 @@ import time
 from typing import Optional, List
 import pandas as pd
 from zoneinfo import ZoneInfo
+from vnstock import Listing
+
+
+company_list = Listing(source='vci')
+cp_list = company_list.symbols_by_group('VN30')
+SYMBOLS = list(cp_list)
 
 
 vn_zone = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -60,65 +66,38 @@ def get_ohlvc(session, symbol, interval= "1m") -> pd.DataFrame:
     )
     return list(rows)
 
-def get_ohlvc_all_symbol(session,symbols,interval= "1m") -> pd.DataFrame:
-    results = []
-    for symbol in symbols:
-      query = """
-          SELECT time, open, high, low, close, volume
-          FROM ohlvc
-          WHERE screener = %s
-          ORDER BY time ASC
-      """
-      rows = session.execute(
-          query,
-          (symbol, interval)
-      )
-      results= results.extend(rows)
-    return results
+# def get_ohlvc_all_symbol(session,symbols,interval= "1m") -> pd.DataFrame:
+#     query = """
+#         SELECT time, open, high, low, close, volume
+#         FROM ohlvc
+#         WHERE symbol = %s AND screener = %s
+#         ORDER BY time ASC
+#     """
+#     results = []
+#     for symbol in symbols:
+#         rows = session.execute(query, (symbol,interval,))
+#         results.extend(rows)
+#     return results
 
 
-def get_latest_trading_all_symbols(session,symbols,limit_per_symbol= 1):
+def get_trading(session,symbols):
+    query = """
+        SELECT *
+        FROM trading_data
+        WHERE symbol = %s
+        LIMIT 1;
+    """
     results = []
     for symbol in symbols:
-        query = """
-            SELECT
-                symbol,
-                handle_time,
-                ceiling,
-                floor,
-                reference,
-                room_foreign,
-                foreign_buy_volume,
-                foreign_sell_volume,
-                buy_1,
-                buy_1_volume,
-                buy_2,
-                buy_2_volume,
-                buy_3,
-                buy_3_volume,
-                sell_1,
-                sell_1_volume,
-                sell_2,
-                sell_2_volume,
-                sell_3,
-                sell_3_volume,
-                highest,
-                lowest,
-                average
-            FROM trading_data
-            WHERE symbol = %s
-            LIMIT %s
-        """
-        rows = session.execute(query, (symbol, limit_per_symbol,))
-        results= results.extend(rows)
+        rows = session.execute(query, (symbol,))
+        results.extend(rows)
     return results
 
 def prediction_data(session,symbol):
     query = """
-        SELECT time, time_step, close_predict
+        SELECT time, time_step, close_predict, screener
         FROM prediction
-        WHERE symbol = %s 
-        LIMIT 10
+        WHERE symbol = %s
     """
     rows = session.execute(
         query,
@@ -141,9 +120,9 @@ def tick_news(session,symbol):
 
 
 @app.get("/ohlcv/{symbol}")
-def get_ohvlc_1_tick(symbol,session = Depends(get_db)):
+def get_ohvlc_1_tick(symbol,session = Depends(get_db),interval: str = Query("1m")):
     try:
-        return get_ohlvc(session, symbol)
+        return get_ohlvc(session, symbol,interval)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
 
@@ -152,14 +131,28 @@ def get_ohvlc_1_tick(symbol,session = Depends(get_db)):
     try:
         return prediction_data(session, symbol)
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
+        raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found,f{e}")
 
 @app.get("/tick/{symbol}")
-def tick_news(symbol,session = Depends(get_db)):
+def tick_new(symbol,session = Depends(get_db)):
     try:
-        return prediction_data(session, symbol)
+        return tick_news(session, symbol)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
+
+# @app.get("/ohlvc/ALL")
+# def get_all(session = Depends(get_db) ,symbols = SYMBOLS, interval: str = Query("1m")):
+#     try: 
+#         return get_ohlvc_all_symbol(session, symbols, interval)
+#     except Exception as e:
+#         raise HTTPException(status_code=404, detail=f"Symbol not found")
+
+@app.get("/trading")
+def get_trade(session = Depends(get_db),symbols = SYMBOLS):
+    try:    
+        return get_trading(session,symbols)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Symbol not found")
 
 
 @app.get("/health")

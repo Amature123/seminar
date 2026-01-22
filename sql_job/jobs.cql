@@ -56,8 +56,9 @@ CREATE TABLE IF NOT EXISTS market.news (
 
 CREATE TABLE IF NOT EXISTS market.prediction(
     symbol text,
+    screener text,
     time timestamp,
-    time_step int,
+    time_step timestamp,
     close_predict double,
     model text,
     created_at timestamp,

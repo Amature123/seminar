@@ -58,8 +58,8 @@ def extract_news_data(symbol):
                 "news_source_link": row.get("news_source_link", ""),
                 "public_date": row.get("public_date", ""),
                 "news_short_content": row.get("news_short_content", ""),
-                "close_price": row.get("close_price", ""),
-                "price_change_pct": row.get("price_change_pct", "")
+                "close_price": row.get("close_price", 0),
+                "price_change_pct": row.get("price_change_pct", 0)
             }
             results.append(news_key_extract)
         return results

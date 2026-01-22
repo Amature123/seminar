@@ -13,11 +13,6 @@ streamlit
 lightweight-charts
 pandas-ta
 schedule
-<<<<<<< HEAD
-transformers
-newsapi-python
-pytorch-forecasting
-=======
 pytorch-forecasting
 fastapi
 uvicorn
@@ -25,4 +20,3 @@ pydantic
 fastapi-cache2
 cachetools
 httpx
->>>>>>> 1eca910 (add backend)

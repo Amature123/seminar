@@ -5,10 +5,7 @@ from kafka import KafkaConsumer
 from cassandra.cluster import Cluster, NoHostAvailable
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from transformers import pipeline
 from utils import safe_json_deserializer
-model_path = '5CD-AI/Vietnamese-Sentiment-visobert'
-sentiment_task = pipeline("sentiment-analysis", model=model_path, tokenizer=model_path)
 
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -68,15 +65,6 @@ def transform_time(value):
             return datetime.fromtimestamp(value, tz=vietnamese_timezone)
     return datetime.fromisoformat(value)
 
-def sentiment_score(sentence: str):
-    if sentence is None:
-        return None
-    sentence = sentence.strip()
-    if not sentence:
-        return None
-
-    result = sentiment_task(sentence)
-    return result[0] 
 
 def insert_data(session, insert_stmt, record: dict):
     try:
@@ -85,12 +73,12 @@ def insert_data(session, insert_stmt, record: dict):
             (
                 record["symbol"],
                 record["id"],
-                record("title"),
-                record("link"),
+                record["news_title"],
+                record["news_source_link"],
                 transform_time(record.get("public_date")),
-                record("s_content"),
-                record("close"),
-                record("price_change_pct")
+                record["news_short_content"],
+                record["close_price"],
+                record["price_change_pct"]
             )
         )
 

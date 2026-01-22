@@ -1,11 +1,11 @@
-import json
+
 import logging
 import time
 from kafka import KafkaConsumer
 from cassandra.cluster import Cluster, NoHostAvailable
-from datetime import datetime
 from utils import safe_json_deserializer,transform_time
 from zoneinfo import ZoneInfo
+import pandas as pd
 vietnamese_timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 
 
@@ -24,7 +24,12 @@ CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
 TOPIC = 'kafka_prediction'
 GROUP_ID = 'ohvcl-consumer-group'
-SCREENER = ['1m','5m', '15m', '30m', '1h']
+INTERVALS={
+    "1m":1,
+    "5m":5,
+    "15m":15,
+    "30m":30
+}
 #######################################################
 def connect_cassandra(max_retries=10, delay=5):
     retries = 0
@@ -56,8 +61,9 @@ def prepare_statements(session):
             time_step,
             close_predict,
             model,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            created_at,
+            screener
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
     """)
 
 def insert_data(session, insert_stmt, record: dict):
@@ -66,16 +72,19 @@ def insert_data(session, insert_stmt, record: dict):
         base_time = transform_time(record["base_time"])
         created_at = transform_time(record["created_at"])
         model = record["model"]
-        for step, value in enumerate(record["predictions"], start=1):
+        screener = record["interval"]
+        screener_str = f"{screener}m"
+        for step, value in enumerate(record["predictions"],start=1):
             session.execute(
                 insert_stmt,
                 (
                     symbol,
                     base_time,
-                    step,
+                    base_time + pd.Timedelta(minutes=step*screener),
                     float(value),
                     model,
                     created_at,
+                    screener_str
                 )
             )
         logger.info(

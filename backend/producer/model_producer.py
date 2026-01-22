@@ -1,5 +1,6 @@
 import json
 import logging
+
 import time
 from kafka import KafkaProducer
 from pytorch_forecasting import TemporalFusionTransformer
@@ -28,11 +29,17 @@ BOOTSTRAP_SERVERS = [
     'kafka_broker_1:19092',
     'kafka_broker_2:19092'
 ]
+INTERVALS={
+    "1m":1,
+    "5m":5,
+    "15m":15,
+    "30m":30
+}
 CASSANDRA_HOSTS = ['cassandra']
 KEYSPACE = 'market'
 MAX_ENCODER_LENGTH = 120
 MAX_PREDICTION_LENGTH = 10
-MODEL_PATH = '/app/model/best_model.ckpt'
+MODEL_PATH = '/app/model/best_model_1.ckpt'
 TOPIC = "kafka_prediction"
 ##########
 def load_model(path: str):
@@ -67,7 +74,7 @@ def df_handler(df):
     new_prediction_data = pd.concat([df, decoder_data], ignore_index=True)
     return new_prediction_data
 
-def prediction_data(data,model,symbol):
+def prediction_data(data,model,symbol,screen):
     try : 
         raw_prediction = model.predict(
                             data,
@@ -80,10 +87,11 @@ def prediction_data(data,model,symbol):
 
         return  {
                 "symbol": symbol,
-                "base_time": data['time'].iloc[-1].isoformat() - pd.Timedelta(minutes=10),
+                "base_time":(data['time'].iloc[-1] - pd.Timedelta(minutes=10*screen)).isoformat(),
                 "predictions": pred_list,
                 "model": "TFT_v3.6",
-                "created_at": datetime.now(vietnamese_timezone).isoformat()
+                "created_at": datetime.now(vietnamese_timezone).isoformat(),
+                "interval": screen
             }
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
@@ -151,7 +159,7 @@ def delivery_report(record_metadata):
 
 def json_serializer(data):
     if isinstance(data, (np.integer, np.floating)):
-        return data.item()
+        return data.items()
     if isinstance(data, uuid.UUID):
         return str(data)
     raise TypeError(f"Type {type(data)} not serializable")
@@ -168,16 +176,17 @@ def produce_message(producer, record):
     except Exception as e:
         logger.error(f"Error producing message: {e}")
 
-def run_kaf(producer,session,model,symbols):
+def run_kaf(producer,session,model,symbols,intervals):
     try:  
         for symbol in symbols:
-            logger.info(f"Producing prediction data")
-            df = get_ohlvc(session,symbol)
-            logger.info(f"Get data final point: {df['time'].iloc[-1]}")
-            record = prediction_data(df,model,symbol)
-            produce_message(producer,record)
-            logger.info(f"Record to be sent: {record}")
-        producer.flush()
+            for interval,val in intervals.items():
+                logger.info(f"Producing prediction data")
+                df = get_ohlvc(session,symbol,interval)
+                logger.info(f"Get data final point: {df['time'].iloc[-1]}")
+                record = prediction_data(df,model,symbol,val)
+                produce_message(producer,record)
+                logger.info(f"Record to be sent: {record}")
+            producer.flush()
         logger.info("All messages sent.")
     except KeyboardInterrupt:
         logger.info("Producer stopped by user")
@@ -190,7 +199,7 @@ if __name__ == "__main__":
     session = connect_cassandra()
     model = load_model(MODEL_PATH)
     producer = create_producer()
-    run_kaf(producer,session,model,SYMBOLS)
+    run_kaf(producer,session,model,SYMBOLS,INTERVALS)
     schedule.every(1).minutes.do(run_kaf,producer,session,model,SYMBOLS)
     while True:
         schedule.run_pending()
