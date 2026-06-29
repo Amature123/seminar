@@ -2,10 +2,10 @@ import json
 import time as t
 import uuid
 import logging
+import random
 import numpy as np
 from datetime import datetime
 from kafka import KafkaProducer
-from vnstock import Company
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
 import schedule
@@ -45,26 +45,38 @@ def delivery_report(record_metadata):
         f"[{record_metadata.partition}] at offset {record_metadata.offset}"
     )
 ###-------data----------###########
+NEWS_TEMPLATES = [
+    ("{s}: Khối ngoại mua ròng phiên hôm nay", "Nhà đầu tư nước ngoài tiếp tục gom {s}."),
+    ("{s} công bố kết quả kinh doanh quý", "Lợi nhuận {s} tăng trưởng so với cùng kỳ."),
+    ("{s}: Thanh khoản tăng mạnh", "Dòng tiền đổ vào {s} trong phiên giao dịch."),
+    ("Cổ phiếu {s} được khuyến nghị mua", "Công ty chứng khoán nâng giá mục tiêu cho {s}."),
+    ("{s} chốt quyền trả cổ tức", "{s} thông báo lịch chi trả cổ tức bằng tiền mặt."),
+]
+
+
 def extract_news_data(symbol):
+    """Sinh tin tức tổng hợp (nguồn miễn phí không có tin tức cổ phiếu VN).
+
+    public_date dạng 'YYYY-MM-DD HH:MM:SS' để Flink TRY_CAST sang TIMESTAMP cho job join.
+    """
     try:
-        company = Company(symbol=symbol, source='VCI')
-        news_df = company.news()
         results = []
-        for _, row in news_df.tail(15).iterrows():
-            news_key_extract = {
+        for _ in range(random.randint(1, 2)):
+            title_tpl, content_tpl = random.choice(NEWS_TEMPLATES)
+            change = round(random.uniform(-3, 3), 2)
+            results.append({
                 "symbol": symbol,
-                "id": row.get("id", ""),
-                "news_title": row.get("news_title", ""),
-                "news_source_link": row.get("news_source_link", ""),
-                "public_date": row.get("public_date", ""),
-                "news_short_content": row.get("news_short_content", ""),
-                "close_price": row.get("close_price", 0),
-                "price_change_pct": row.get("price_change_pct", 0)
-            }
-            results.append(news_key_extract)
+                "id": str(uuid.uuid4()),
+                "news_title": title_tpl.format(s=symbol),
+                "news_source_link": f"https://example.com/news/{symbol.lower()}",
+                "public_date": datetime.now(vietnamese_timezone).strftime("%Y-%m-%d %H:%M:%S"),
+                "news_short_content": content_tpl.format(s=symbol),
+                "close_price": round(random.uniform(15000, 80000), 2),
+                "price_change_pct": change,
+            })
         return results
     except Exception as e:
-        logger.error(f"No news for now: {e}")
+        logger.error(f"Build news failed: {e}")
         return None
 ###------kafka-----####
 def produce_message(producer, record):

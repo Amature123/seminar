@@ -36,8 +36,17 @@ run_script_with_restart /app/processing/news_handler.py &
 PID_NEWS=$!
 
 run_script_with_restart /app/processing/model_handler.py &
-PID_NEWS=$!
+PID_MODEL=$!
 
-trap "echo 'Stopping...'; kill $PID_OHVLC $PID_NEWS" SIGTERM SIGINT
+run_script_with_restart /app/processing/indicator_handler.py &
+PID_IND=$!
+
+run_script_with_restart /app/processing/signal_handler.py &
+PID_SIG=$!
+
+run_script_with_restart /app/processing/news_impact_handler.py &
+PID_IMPACT=$!
+
+trap "echo 'Stopping...'; kill $PID_OHVLC $PID_TRADING $PID_NEWS $PID_MODEL $PID_IND $PID_SIG $PID_IMPACT" SIGTERM SIGINT
 
 wait

@@ -2,10 +2,10 @@ import json
 import time
 import uuid
 import logging
+import random
 import numpy as np
 from datetime import datetime
 from kafka import KafkaProducer
-from vnstock import Trading
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
 
@@ -45,61 +45,63 @@ def delivery_report(record_metadata):
 
 
 
+# Giá tham chiếu giữ trạng thái giữa các vòng để bảng giá biến động liền mạch
+_REF_PRICE = {}
+
+
 def extract_trading_data(symbol):
+    """Sinh bảng giá (bid/ask, khối ngoại) tổng hợp.
+
+    Các nguồn miễn phí (yfinance...) không cung cấp order-book/khối ngoại của HOSE,
+    nên dữ liệu bảng giá được mô phỏng quanh một mức giá tham chiếu có trạng thái.
+    """
     handle_time = datetime.now(vietnamese_timezone)
-
     try:
-        trading = Trading(symbol='VN30F1M', source='vci')
-        board = trading.price_board([symbol.upper()])
+        ref = _REF_PRICE.get(symbol)
+        if ref is None:
+            ref = round(random.uniform(15000, 80000), 0)
+        # bước giá nhỏ ngẫu nhiên
+        price = round(ref * random.uniform(0.99, 1.01), 0)
+        _REF_PRICE[symbol] = price
 
-        logger.info(
-            f"Fetched data for {symbol}: "
-            f"{board.listing.sending_time[0] if board.listing is not None else None}"
-        )
+        tick = max(round(price * 0.001), 50)
+
+        def vol():
+            return int(random.randint(1, 50) * 10000)
 
         record = {
             "handle_time": handle_time.strftime("%Y-%m-%d %H:%M:%S"),
             "symbol": symbol,
-            "ceiling": board.listing.ceiling[0] if board.listing is not None else None,
-            "floor": board.listing.floor[0] if board.listing is not None else None,
-            "reference": board.listing.ref_price[0] if board.listing is not None else None,
-            "Room_foreign": board.match.current_room[0] if board.match is not None else None,
-            "foreign_buy_volume": board.match.foreign_buy_volume[0] if board.match is not None else None,
-            "foreign_sell_volume": board.match.foreign_sell_volume[0] if board.match is not None else None,
+            "ceiling": round(ref * 1.07, 0),
+            "floor": round(ref * 0.93, 0),
+            "reference": ref,
+            "Room_foreign": float(random.randint(1, 300) * 1_000_000),
+            "foreign_buy_volume": float(vol()),
+            "foreign_sell_volume": float(vol()),
             "Buy": {
-                "Buy_1": board.bid_ask.bid_1_price[0] if board.bid_ask is not None else None,
-                "Buy_1_volume": board.bid_ask.bid_1_volume[0] if board.bid_ask is not None else None,
-                "Buy_2": board.bid_ask.bid_2_price[0] if board.bid_ask is not None else None,
-                "Buy_2_volume": board.bid_ask.bid_2_volume[0] if board.bid_ask is not None else None,
-                "Buy_3": board.bid_ask.bid_3_price[0] if board.bid_ask is not None else None,
-                "Buy_3_volume": board.bid_ask.bid_3_volume[0] if board.bid_ask is not None else None,
+                "Buy_1": price - tick, "Buy_1_volume": vol(),
+                "Buy_2": price - 2 * tick, "Buy_2_volume": vol(),
+                "Buy_3": price - 3 * tick, "Buy_3_volume": vol(),
             },
             "Sell": {
-                "Sell_1": board.bid_ask.ask_1_price[0] if board.bid_ask is not None else None,
-                "Sell_1_volume": board.bid_ask.ask_1_volume[0] if board.bid_ask is not None else None,
-                "Sell_2": board.bid_ask.ask_2_price[0] if board.bid_ask is not None else None,
-                "Sell_2_volume": board.bid_ask.ask_2_volume[0] if board.bid_ask is not None else None,
-                "Sell_3": board.bid_ask.ask_3_price[0] if board.bid_ask is not None else None,
-                "Sell_3_volume": board.bid_ask.ask_3_volume[0] if board.bid_ask is not None else None,
+                "Sell_1": price + tick, "Sell_1_volume": vol(),
+                "Sell_2": price + 2 * tick, "Sell_2_volume": vol(),
+                "Sell_3": price + 3 * tick, "Sell_3_volume": vol(),
             },
-            "highest": board.match.highest[0] if board.match is not None else None,
-            "lowest": board.match.lowest[0] if board.match is not None else None,
-            "average": (
-                (board.match.highest[0] + board.match.lowest[0]) / 2
-                if board.match is not None else None
-            ),
+            "highest": round(price * 1.02, 0),
+            "lowest": round(price * 0.98, 0),
+            "average": price,
         }
 
         record = {
             k: (v.item() if isinstance(v, np.generic) else v)
             for k, v in record.items()
         }
-
-        logger.info(f"Record built for {symbol}: {record}")
+        logger.info(f"Record built for {symbol}: ref={ref} price={price}")
         return record
 
     except Exception as e:
-        logger.error(f"Error fetching data for {symbol}: {e}")
+        logger.error(f"Error building trading data for {symbol}: {e}")
         return None
 
 

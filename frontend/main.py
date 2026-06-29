@@ -85,6 +85,36 @@ def get_news(symbol):
     except:
         return None
 
+@st.cache_data(ttl=30)
+def get_indicators(symbol, interval="1m"):
+    try:
+        response = requests.get(f"{API_URL}/indicators/{symbol}?interval={interval}", timeout=10)
+        if response.status_code == 200:
+            return pd.DataFrame(response.json())
+        return None
+    except:
+        return None
+
+@st.cache_data(ttl=30)
+def get_signals(symbol):
+    try:
+        response = requests.get(f"{API_URL}/signals/{symbol}", timeout=10)
+        if response.status_code == 200:
+            return pd.DataFrame(response.json())
+        return None
+    except:
+        return None
+
+@st.cache_data(ttl=60)
+def get_news_impact(symbol):
+    try:
+        response = requests.get(f"{API_URL}/news_impact/{symbol}", timeout=10)
+        if response.status_code == 200:
+            return pd.DataFrame(response.json())
+        return None
+    except:
+        return None
+
 # Header
 col1, col2, col3 = st.columns([2, 3, 2])
 with col2:
@@ -124,7 +154,9 @@ with st.sidebar:
     st.caption(f"Cập nhật: {datetime.now().strftime('%H:%M:%S')}")
 
 
-tab1, tab2, tab3, tab4 = st.tabs(["📈 Biểu đồ", "📊 Dữ liệu giao dịch", "🔮 Dự đoán", "📰 Tin tức"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📈 Biểu đồ", "📊 Dữ liệu giao dịch", "🔮 Dự đoán", "📰 Tin tức", "⚡ Chỉ báo & Tín hiệu"
+])
 
 # Tab 1: Biểu đồ OHLCV
 with tab1:
@@ -135,7 +167,7 @@ with tab1:
     if df_ohlcv is not None and not df_ohlcv.empty:
         # Chuyển đổi timestamp
         if 'time' in df_ohlcv.columns:
-            df_ohlcv['time'] = pd.to_datetime(df_ohlcv['time'])
+            df_ohlcv['time'] = pd.to_datetime(df_ohlcv['time'], format='ISO8601')
             df_ohlcv = df_ohlcv.sort_values('time')
         
         # Metrics row
@@ -180,7 +212,30 @@ with tab1:
             ),
             row=1, col=1
         )
-        
+
+        # Overlay chỉ báo (SMA/EMA/Bollinger) từ Flink
+        df_ind = get_indicators(selected_symbol, interval_map[selected_interval])
+        if df_ind is not None and not df_ind.empty and 'time' in df_ind.columns:
+            df_ind['time'] = pd.to_datetime(df_ind['time'], format='ISO8601')
+            df_ind = df_ind.sort_values('time')
+            overlays = [
+                ('sma20', 'SMA20', '#1f77b4'),
+                ('ema12', 'EMA12', '#ff7f0e'),
+                ('ema26', 'EMA26', '#2ca02c'),
+                ('bb_upper', 'BB trên', 'rgba(150,150,150,0.5)'),
+                ('bb_lower', 'BB dưới', 'rgba(150,150,150,0.5)'),
+            ]
+            for col_name, label, color in overlays:
+                if col_name in df_ind.columns:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df_ind['time'], y=df_ind[col_name],
+                            mode='lines', name=label,
+                            line=dict(color=color, width=1)
+                        ),
+                        row=1, col=1
+                    )
+
         # Volume bars
         colors = ['red' if df_ohlcv['close'].iloc[i] < df_ohlcv['open'].iloc[i] 
                  else 'green' for i in range(len(df_ohlcv))]
@@ -302,8 +357,8 @@ with tab3:
     if df_pred is not None and not df_pred.empty:
         # Convert timestamp
         if 'time' in df_pred.columns:
-            df_pred['time'] = pd.to_datetime(df_pred['time'])
-            df_pred['time_step'] = pd.to_datetime(df_pred['time_step'])
+            df_pred['time'] = pd.to_datetime(df_pred['time'], format='ISO8601')
+            df_pred['time_step'] = pd.to_datetime(df_pred['time_step'], format='ISO8601')
         
         # Lấy danh sách screener (interval) có trong data
         available_screeners = sorted(df_pred['screener'].unique())
@@ -376,6 +431,80 @@ with tab4:
                 st.divider()
     else:
         st.info("Không có tin tức")
+
+    # News impact (Flink interval join: biến động giá 15' sau tin)
+    st.divider()
+    st.subheader("📉 Tác động giá sau tin (Flink join)")
+    df_impact = get_news_impact(selected_symbol)
+    if df_impact is not None and not df_impact.empty:
+        show_cols = [c for c in ['news_time', 'title', 'price_before', 'price_after',
+                                 'impact_pct', 'n_candles'] if c in df_impact.columns]
+        st.dataframe(df_impact[show_cols], use_container_width=True, hide_index=True)
+    else:
+        st.caption("Chưa có dữ liệu tác động.")
+
+# Tab 5: Chỉ báo kỹ thuật & Tín hiệu (CEP)
+with tab5:
+    st.subheader(f"Chỉ báo kỹ thuật {selected_symbol}")
+
+    df_ind5 = get_indicators(selected_symbol, "1m")
+    if df_ind5 is not None and not df_ind5.empty and 'time' in df_ind5.columns:
+        df_ind5['time'] = pd.to_datetime(df_ind5['time'], format='ISO8601')
+        df_ind5 = df_ind5.sort_values('time')
+
+        latest = df_ind5.iloc[-1]
+
+        def sv(key):
+            v = latest.get(key)
+            return float(v) if v is not None and pd.notna(v) else float('nan')
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("RSI(14)", f"{sv('rsi14'):.1f}")
+        with c2:
+            st.metric("MACD", f"{sv('macd'):.3f}")
+        with c3:
+            st.metric("VWAP", f"{sv('vwap'):,.2f}")
+        with c4:
+            st.metric("SMA20", f"{sv('sma20'):,.2f}")
+
+        # RSI
+        if 'rsi14' in df_ind5.columns:
+            fig_rsi = go.Figure()
+            fig_rsi.add_trace(go.Scatter(x=df_ind5['time'], y=df_ind5['rsi14'],
+                                         mode='lines', name='RSI(14)', line=dict(color='purple')))
+            fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+            fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
+            fig_rsi.update_layout(title="RSI(14)", height=300, template='plotly_white',
+                                  yaxis_range=[0, 100])
+            st.plotly_chart(fig_rsi, use_container_width=True)
+
+        # MACD
+        if 'macd' in df_ind5.columns:
+            fig_macd = go.Figure()
+            fig_macd.add_trace(go.Bar(x=df_ind5['time'], y=df_ind5['macd'], name='MACD'))
+            fig_macd.update_layout(title="MACD (EMA12 - EMA26)", height=300, template='plotly_white')
+            st.plotly_chart(fig_macd, use_container_width=True)
+    else:
+        st.info("Chưa có dữ liệu chỉ báo")
+
+    st.divider()
+    st.subheader(f"🚨 Tín hiệu CEP {selected_symbol}")
+    df_sig = get_signals(selected_symbol)
+    if df_sig is not None and not df_sig.empty:
+        if 'signal_time' in df_sig.columns:
+            df_sig['signal_time'] = pd.to_datetime(df_sig['signal_time'], format='ISO8601')
+            df_sig = df_sig.sort_values('signal_time', ascending=False)
+
+        def _emoji(side):
+            return {"BUY": "🟢 MUA", "SELL": "🔴 BÁN", "WATCH": "🟡 THEO DÕI"}.get(side, side)
+
+        df_show = df_sig.copy()
+        if 'side' in df_show.columns:
+            df_show['side'] = df_show['side'].apply(_emoji)
+        st.dataframe(df_show, use_container_width=True, hide_index=True)
+    else:
+        st.info("Chưa có tín hiệu nào")
 
 # Auto refresh
 if auto_refresh:

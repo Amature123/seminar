@@ -159,7 +159,7 @@ def delivery_report(record_metadata):
 
 def json_serializer(data):
     if isinstance(data, (np.integer, np.floating)):
-        return data.items()
+        return data.item()
     if isinstance(data, uuid.UUID):
         return str(data)
     raise TypeError(f"Type {type(data)} not serializable")
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     model = load_model(MODEL_PATH)
     producer = create_producer()
     run_kaf(producer,session,model,SYMBOLS,INTERVALS)
-    schedule.every(1).minutes.do(run_kaf,producer,session,model,SYMBOLS)
+    schedule.every(1).minutes.do(run_kaf,producer,session,model,SYMBOLS,INTERVALS)
     while True:
         schedule.run_pending()
 

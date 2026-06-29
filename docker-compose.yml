@@ -181,7 +181,9 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
-        taskmanager.numberOfTaskSlots: 3
+        taskmanager.numberOfTaskSlots: 8
+        taskmanager.memory.process.size: 2048m
+        python.fn-execution.bundle.size: 1000
     networks:
       - seminar_project
 

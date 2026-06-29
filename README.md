@@ -175,6 +175,25 @@ Wait around **25–30 seconds** for services to warm up.
 
 ---
 
+## Flink Analytics (Extended)
+
+Flink không chỉ làm resampling nến mà còn đảm nhận toàn bộ tính toán real-time
+trong một job PyFlink duy nhất (`flink/job/job.py`, UDF ở `flink/job/udfs.py`):
+
+| Tính năng | Kỹ thuật Flink | Output topic → Cassandra |
+|-----------|----------------|--------------------------|
+| Nến đa khung 1m→5m/15m/30m/1H | **Cascading window TVF** (tính dồn từ 1m) | `flink_computed_ohlc` → `ohlvc` |
+| SMA, Bollinger, VWAP, return | **OVER window** | `flink_indicators` → `indicators` |
+| EMA12/26, MACD, RSI14 | **Python UDF** (`ema`, `rsi`, `macd`) trên mảng `ARRAY_AGG` | `flink_indicators` → `indicators` |
+| Tín hiệu 3 nến tăng/giảm, volume spike | **CEP `MATCH_RECOGNIZE`** | `flink_signals` → `signals` |
+| Tác động giá 15' sau tin | **Interval join** news ⋈ giá | `flink_news_impact` → `news_impact` |
+
+Các INSERT được gộp bằng `EXECUTE STATEMENT SET` để dùng chung một source scan.
+Dashboard có thêm overlay chỉ báo trên biểu đồ nến và tab "Chỉ báo & Tín hiệu".
+
+> Lưu ý: image Flink nay cài thêm PyFlink (`apache-flink==2.0.0`) để chạy Python UDF;
+> `taskmanager.numberOfTaskSlots` được nâng lên để chứa nhiều operator hơn.
+
 ## Current Limitations
 
 * Limited system-wide testing

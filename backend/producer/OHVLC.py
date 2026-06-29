@@ -6,7 +6,8 @@ import logging
 import numpy as np
 from datetime import datetime, time, timedelta
 from kafka import KafkaProducer
-from vnstock import Quote, Screener, Trading
+import yfinance as yf
+import pandas as pd
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
 from faker import Faker
@@ -57,31 +58,33 @@ def delivery_report(record_metadata):
     )
 #----------------------Extract_data----------------------------#
 def extract_stock_data(symbol):
-    start_date =today.strftime("%Y-%m-%d")
-    end_date =today.strftime("%Y-%m-%d")
-    screen = '1m'
+    """Lấy nến 1m gần nhất từ yfinance (ticker <symbol>.VN)."""
     try:
-        quote = Quote(symbol=symbol, source='vci')
-        ohvlc = quote.history(
-            start=start_date,
-            end=end_date,
-            interval=screen
+        df = yf.download(
+            f"{symbol}.VN",
+            period="1d",
+            interval="1m",
+            progress=False,
+            auto_adjust=False,
+            timeout=10,
         )
-        record = {
-            "screener": screen,
-            "symbol": symbol,
-            "time": ohvlc["time"].iloc[-1].strftime("%Y-%m-%d %H:%M:%S"),
-            "open": ohvlc["open"].iloc[-1],
-            "high": ohvlc["high"].iloc[-1],
-            "low": ohvlc["low"].iloc[-1],
-            "close": ohvlc["close"].iloc[-1],
-            "volume": ohvlc["volume"].iloc[-1]
-        }
+        if df is None or df.empty:
+            return None
+        # yfinance trả MultiIndex (Price, Ticker) -> làm phẳng
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        last = df.iloc[-1]
+        ts = df.index[-1]
         return {
-            k: (v.item() if isinstance(v, np.generic) else v)
-            for k, v in record.items()
+            "screener": "1m",
+            "symbol": symbol,
+            "time": ts.strftime("%Y-%m-%d %H:%M:%S"),
+            "open": round(float(last["Open"]), 2),
+            "high": round(float(last["High"]), 2),
+            "low": round(float(last["Low"]), 2),
+            "close": round(float(last["Close"]), 2),
+            "volume": int(last["Volume"]),
         }
-
     except Exception as e:
         logger.error(f"Error fetching data for {symbol}: {e}")
         return None
@@ -111,16 +114,76 @@ def randomize_from_last_session(symbol, price_pct=0.005, vol_pct=0.2):
     }
 
 
+def synthetic_seed(symbol):
+    """Seed giá tổng hợp khi yfinance không khả dụng, để mock data chạy offline."""
+    base = round(random.uniform(15000, 80000), 2)
+    return {
+        "screener": "1m",
+        "symbol": symbol,
+        "time": datetime.now(vietnamese_timezone).strftime("%Y-%m-%d %H:%M:%S"),
+        "open": base, "high": base, "low": base, "close": base,
+        "volume": random.randint(50000, 500000),
+    }
+
+
+def batch_fetch_seeds(symbols, timeout=25):
+    """Lấy seed cho CẢ rổ trong MỘT call yfinance (ít bị 429 hơn gọi từng mã).
+
+    Bọc trong thread + timeout để không bao giờ treo khi Yahoo rate-limit.
+    Trả dict symbol->record; mã nào thiếu sẽ được seed tổng hợp ở hàm gọi.
+    """
+    import concurrent.futures
+
+    tickers = [f"{s}.VN" for s in symbols]
+
+    def _do():
+        return yf.download(
+            tickers, period="1d", interval="1m",
+            progress=False, auto_adjust=False,
+            group_by="ticker", threads=True, timeout=10,
+        )
+
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        df = ex.submit(_do).result(timeout=timeout)
+    except Exception as e:
+        logger.warning(f"Batch yfinance seed failed/timeout: {e}")
+        ex.shutdown(wait=False)   # KHÔNG chờ thread yfinance đang treo (429)
+        return {}
+    ex.shutdown(wait=False)
+
+    out = {}
+    if df is None or df.empty:
+        return out
+    for s in symbols:
+        try:
+            sub = df[f"{s}.VN"].dropna()
+            if sub.empty:
+                continue
+            last = sub.iloc[-1]
+            out[s] = {
+                "screener": "1m", "symbol": s,
+                "time": sub.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                "open": round(float(last["Open"]), 2),
+                "high": round(float(last["High"]), 2),
+                "low": round(float(last["Low"]), 2),
+                "close": round(float(last["Close"]), 2),
+                "volume": int(last["Volume"]),
+            }
+        except Exception:
+            continue
+    return out
+
+
 def load_last_session_data(symbols):
+    """Seed cho mock mode (ngoài giờ giao dịch) = synthetic, không gọi mạng để
+    không bao giờ treo. yfinance được dùng cho phiên giao dịch thật (extract_stock_data).
+    Có thể bật lại seed thật bằng batch_fetch_seeds() khi Yahoo không rate-limit."""
     global LAST_SESSION_DATA
-    logger.info("Loading last session OHLC data...")
+    logger.info("Seeding session data (synthetic) ...")
     for symbol in symbols:
-        data = extract_stock_data(symbol)
-        if data:
-            LAST_SESSION_DATA[symbol] = data
-            logger.info(f"Cached last session data for {symbol}")
-        else:
-            logger.warning(f"No data for {symbol}")
+        LAST_SESSION_DATA[symbol] = synthetic_seed(symbol)
+    logger.info(f"Seeded {len(symbols)} symbols (synthetic)")
 #----------------------Producer----------------------------#
 def produce_message(producer, record):
     if not record:

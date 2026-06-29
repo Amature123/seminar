@@ -8,12 +8,12 @@ import time
 from typing import Optional, List
 import pandas as pd
 from zoneinfo import ZoneInfo
-from vnstock import Listing
-
-
-company_list = Listing(source='vci')
-cp_list = company_list.symbols_by_group('VN30')
-SYMBOLS = list(cp_list)
+# Danh sách VN30 (hardcode; đã bỏ vnstock, nguồn giá dùng yfinance với hậu tố .VN)
+SYMBOLS = [
+    'ACB', 'BCM', 'BID', 'BVH', 'CTG', 'FPT', 'GAS', 'GVR', 'HDB', 'HPG',
+    'MBB', 'MSN', 'MWG', 'PLX', 'POW', 'SAB', 'SHB', 'SSB', 'SSI', 'STB',
+    'TCB', 'TPB', 'VCB', 'VHM', 'VIB', 'VIC', 'VJC', 'VNM', 'VPB', 'VRE',
+]
 
 
 vn_zone = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -117,6 +117,39 @@ def tick_news(session,symbol):
     )
     return list(rows)
 
+def get_indicators(session, symbol, interval="1m", limit=200):
+    query = """
+        SELECT time, close, sma20, ema12, ema26, macd, rsi14,
+               bb_mid, bb_upper, bb_lower, vwap, ret
+        FROM indicators
+        WHERE screener = %s AND symbol = %s
+        LIMIT %s
+    """
+    rows = session.execute(query, (interval, symbol, limit))
+    return list(rows)
+
+def get_signals(session, symbol, limit=50):
+    query = """
+        SELECT symbol, signal_time, signal_type, side, price, detail
+        FROM signals
+        WHERE symbol = %s
+        LIMIT %s
+    """
+    rows = session.execute(query, (symbol, limit))
+    return list(rows)
+
+def get_news_impact(session, symbol, limit=20):
+    query = """
+        SELECT symbol, id, news_time, title, link,
+               price_before, price_after, max_price, min_price,
+               n_candles, impact_pct
+        FROM news_impact
+        WHERE symbol = %s
+        LIMIT %s
+    """
+    rows = session.execute(query, (symbol, limit))
+    return list(rows)
+
 
 
 @app.get("/ohlcv/{symbol}")
@@ -149,10 +182,31 @@ def tick_new(symbol,session = Depends(get_db)):
 
 @app.get("/trading")
 def get_trade(session = Depends(get_db),symbols = SYMBOLS):
-    try:    
+    try:
         return get_trading(session,symbols)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Symbol not found")
+
+@app.get("/indicators/{symbol}")
+def indicators(symbol, session = Depends(get_db), interval: str = Query("1m")):
+    try:
+        return get_indicators(session, symbol, interval)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Indicators for {symbol} not found")
+
+@app.get("/signals/{symbol}")
+def signals(symbol, session = Depends(get_db)):
+    try:
+        return get_signals(session, symbol)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Signals for {symbol} not found")
+
+@app.get("/news_impact/{symbol}")
+def news_impact(symbol, session = Depends(get_db)):
+    try:
+        return get_news_impact(session, symbol)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"News impact for {symbol} not found")
 
 
 @app.get("/health")

@@ -4,7 +4,7 @@ import time
 import numpy as np
 from datetime import datetime,timedelta
 from cassandra.cluster import Cluster, NoHostAvailable
-from vnstock import Quote
+import yfinance as yf
 from utils import SYMBOLS
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -58,23 +58,26 @@ def prepare_statements(session):
     """)
 
 def fetch_1m(symbol):
-    end_dt = datetime.now(vietnamese_timezone)
-    start_dt = end_dt - timedelta(days=0.5)
-    start = start_dt.strftime("%Y-%m-%d")
-    end = end_dt.strftime("%Y-%m-%d")
+    """Lấy lịch sử nến 1m từ yfinance, chuẩn hoá về cột time/open/high/low/close/volume."""
     try:
-        quote = Quote(symbol=symbol, source="vci")
-        df = quote.history(
-            start=start,
-            end=end,
-            interval="1m"
+        df = yf.download(
+            f"{symbol}.VN",
+            period="5d",
+            interval="1m",
+            progress=False,
+            auto_adjust=False,
         )
-
         if df is None or df.empty:
             return None
-
-        df["time"] = pd.to_datetime(df["time"])
-        return df
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df = df.reset_index().rename(columns={
+            "Datetime": "time", "Date": "time",
+            "Open": "open", "High": "high", "Low": "low",
+            "Close": "close", "Volume": "volume",
+        })
+        df["time"] = pd.to_datetime(df["time"]).dt.tz_localize(None)
+        return df[["time", "open", "high", "low", "close", "volume"]]
 
     except Exception as e:
         logger.error(f"Fetch 1m failed {symbol}: {e}")
